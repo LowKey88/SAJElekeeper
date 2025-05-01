@@ -59,7 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "session": session,
     }
     
-    # Set up all platforms
+    # Set up all platforms - use the recommended method
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
     # Register unload handlers

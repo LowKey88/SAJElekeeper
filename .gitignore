@@ -1,5 +1,6 @@
 # Ignore memory-bank folder
 memory-bank/
+.clinerules
 
 # Python cache files
 __pycache__/
