@@ -1,0 +1,8 @@
+{
+  "name": "SAJ Monitor",
+  "render_readme": true,
+  "domain": "saj_monitor",
+  "documentation": "https://github.com/lowkey88/saj_monitor",
+  "issue_tracker": "https://github.com/lowkey88/saj_monitor/issues",
+  "homeassistant": "2025.0.0"
+}
