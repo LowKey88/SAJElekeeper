@@ -144,8 +144,10 @@ async def async_setup_entry(
                 SajTotalBatteryDischargeSensor(coordinator, device_sn, device_name),
                 SajBatteryRoundTripEfficiencySensor(coordinator, device_sn, device_name),
                 SajTodayLoadEnergySensor(coordinator, device_sn, device_name),
+                SajTotalLoadEnergySensor(coordinator, device_sn, device_name),
                 SajTodayGridExportEnergySensor(coordinator, device_sn, device_name),
                 SajTodayGridImportEnergySensor(coordinator, device_sn, device_name),
+                SajTotalGridImportSensor(coordinator, device_sn, device_name),
             ])
             
             # Add backup load power if available
@@ -282,8 +284,8 @@ class SajCurrentPowerSensor(SajBaseSensor):
             coordinator=coordinator,
             device_sn=device_sn,
             device_name=device_name,
-            name_suffix="Current Power",
-            unique_id_suffix="current_power",
+            name_suffix="Current PV Power",
+            unique_id_suffix="current_pv_power",
             icon=POWER_ICON,
             device_class=SensorDeviceClass.POWER,
             state_class=SensorStateClass.MEASUREMENT,
@@ -383,7 +385,16 @@ class SajTotalEnergySensor(SajBaseSensor):
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        # First try history data
+        device_data = self._get_device_data()
+        device_type = device_data.get("device_type")
+        
+        # For battery devices, try processed data which includes realtime data
+        if device_type == DEVICE_TYPE_BATTERY:
+            processed_data = self._get_processed_data()
+            if "total_pv_energy" in processed_data:
+                return processed_data["total_pv_energy"]
+        
+        # For non-battery devices, try history data first
         history_data = self._get_history_data()
         if "totalPvEnergy" in history_data:
             try:
@@ -431,7 +442,20 @@ class SajOperatingStatusSensor(SajBaseSensor):
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        # Get device status from plant stats
+        device_data = self._get_device_data()
+        device_type = device_data.get("device_type")
+        
+        # For battery devices, try processed data which includes realtime data
+        if device_type == DEVICE_TYPE_BATTERY:
+            processed_data = self._get_processed_data()
+            if "operating_status" in processed_data:
+                try:
+                    status = int(processed_data["operating_status"])
+                    return self._status_descriptions.get(status, f"Unknown status ({status})")
+                except (ValueError, TypeError):
+                    pass
+        
+        # Fall back to plant stats for non-battery devices
         plant_stats = self._get_plant_stats()
         if "deviceStatus" in plant_stats:
             try:
@@ -467,6 +491,20 @@ class SajOperatingModeSensor(SajBaseSensor):
     @property
     def native_value(self):
         """Return the state of the sensor."""
+        device_data = self._get_device_data()
+        device_type = device_data.get("device_type")
+        
+        # For battery devices, try processed data which includes realtime data
+        if device_type == DEVICE_TYPE_BATTERY:
+            processed_data = self._get_processed_data()
+            if "operating_mode" in processed_data:
+                try:
+                    mode = int(processed_data["operating_mode"])
+                    return self._mode_descriptions.get(mode, f"Unknown mode ({mode})")
+                except (ValueError, TypeError):
+                    pass
+        
+        # Fall back to history data for non-battery devices
         history_data = self._get_history_data()
         if "mpvMode" in history_data:
             try:
@@ -538,9 +576,7 @@ class SajGridPowerSensor(SajBaseSensor):
         # For battery devices, try processed data which includes realtime data
         if device_type == DEVICE_TYPE_BATTERY and "grid_power_abs" in processed_data:
             grid_power = processed_data["grid_power_abs"]
-            grid_status = "importing" if grid_power > 0 else "exporting"
-            # Store the calculated status in processed_data for the grid status sensor
-            processed_data["grid_status_calculated"] = grid_status
+            # Note: grid_status_calculated is already set in saj_api.py based on gridDirection
             # Return the raw grid power value
             return grid_power
         
@@ -608,7 +644,16 @@ class SajTodayGridExportSensor(SajBaseSensor):
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        # First try history data
+        device_data = self._get_device_data()
+        device_type = device_data.get("device_type")
+        
+        # For battery devices, try processed data which includes realtime data
+        if device_type == DEVICE_TYPE_BATTERY:
+            processed_data = self._get_processed_data()
+            if "today_grid_export_energy" in processed_data:
+                return processed_data["today_grid_export_energy"]
+        
+        # For non-battery devices, try history data first
         history_data = self._get_history_data()
         if "todaySellEnergy" in history_data:
             try:
@@ -646,7 +691,16 @@ class SajTotalGridExportSensor(SajBaseSensor):
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        # First try history data
+        device_data = self._get_device_data()
+        device_type = device_data.get("device_type")
+        
+        # For battery devices, try processed data which includes realtime data
+        if device_type == DEVICE_TYPE_BATTERY:
+            processed_data = self._get_processed_data()
+            if "total_grid_export" in processed_data:
+                return processed_data["total_grid_export"]
+        
+        # For non-battery devices, try history data first
         history_data = self._get_history_data()
         if "totalSellEnergy" in history_data:
             try:
@@ -1058,7 +1112,7 @@ class SajBatteryPowerSensor(SajBaseSensor):
             # Apply sign based on battery status
             power = processed_data["battery_power_abs"]
             status = processed_data.get("battery_status_calculated", "")
-            return power if status == "discharging" else -power if status == "charging" else 0
+            return power if status == "Discharging" else -power if status == "Charging" else 0
             
         return None
         
@@ -1510,3 +1564,65 @@ class SajTodayGridImportEnergySensor(SajBaseSensor):
        """Return the state of the sensor."""
        processed_data = self._get_processed_data()
        return processed_data.get("today_grid_import_energy")
+
+class SajTotalGridImportSensor(SajBaseSensor):
+   """Sensor for SAJ total grid import energy."""
+
+   def __init__(self, coordinator, device_sn, device_name):
+       """Initialize the sensor."""
+       super().__init__(
+           coordinator=coordinator,
+           device_sn=device_sn,
+           device_name=device_name,
+           name_suffix="Total Grid Import",
+           unique_id_suffix="total_grid_import",
+           icon=GRID_ICON,
+           device_class=SensorDeviceClass.ENERGY,
+           state_class=SensorStateClass.TOTAL,
+           unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+       )
+
+   @property
+   def native_value(self):
+       """Return the state of the sensor."""
+       device_data = self._get_device_data()
+       device_type = device_data.get("device_type")
+       
+       # For battery devices, try processed data which includes realtime data
+       if device_type == DEVICE_TYPE_BATTERY:
+           processed_data = self._get_processed_data()
+           if "total_grid_import" in processed_data:
+               return processed_data["total_grid_import"]
+       
+       return None
+
+class SajTotalLoadEnergySensor(SajBaseSensor):
+   """Sensor for SAJ total load energy."""
+
+   def __init__(self, coordinator, device_sn, device_name):
+       """Initialize the sensor."""
+       super().__init__(
+           coordinator=coordinator,
+           device_sn=device_sn,
+           device_name=device_name,
+           name_suffix="Total Home Consumption",
+           unique_id_suffix="total_load_energy",
+           icon="mdi:home-lightning-bolt",
+           device_class=SensorDeviceClass.ENERGY,
+           state_class=SensorStateClass.TOTAL,
+           unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+       )
+
+   @property
+   def native_value(self):
+       """Return the state of the sensor."""
+       device_data = self._get_device_data()
+       device_type = device_data.get("device_type")
+       
+       # For battery devices, try processed data which includes realtime data
+       if device_type == DEVICE_TYPE_BATTERY:
+           processed_data = self._get_processed_data()
+           if "total_load_energy" in processed_data:
+               return processed_data["total_load_energy"]
+       
+       return None

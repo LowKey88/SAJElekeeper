@@ -298,7 +298,11 @@ class SajApiClient:
         # Get different types of data based on device type
         plant_stats = await self.get_plant_statistics(plant_id)
         device_info = await self.get_device_details(device_sn)
-        load_monitoring = await self.get_load_monitoring_data(plant_id)
+        
+        # Only fetch load monitoring data for non-battery devices
+        load_monitoring = None
+        if device_type != DEVICE_TYPE_BATTERY:
+            load_monitoring = await self.get_load_monitoring_data(plant_id)
 
         # For battery devices, use only realtime data
         # For non-battery devices, use history data
@@ -342,31 +346,58 @@ class SajApiClient:
         if is_realtime and device_type == DEVICE_TYPE_BATTERY:
             # Use realtime data fields for battery devices
             try:
-                # Log all battery-related fields for debugging
+                # Log device type
+                _LOGGER.debug("Device type: battery")
+                
+                # Grid-related data
+                _LOGGER.debug("--- GRID DATA ---")
                 _LOGGER.debug("Realtime data sysGridPowerWatt: %s", data.get('sysGridPowerWatt'))
                 _LOGGER.debug("Realtime data gridDirection: %s", data.get('gridDirection'))
-                _LOGGER.debug("Realtime data sysTotalLoadWatt: %s", data.get('sysTotalLoadWatt'))
+                _LOGGER.debug("Realtime data todaySellEnergy: %s", data.get('todaySellEnergy'))
+                _LOGGER.debug("Realtime data todayFeedInEnergy: %s", data.get('todayFeedInEnergy'))
+                
+                # Battery-related data
+                _LOGGER.debug("--- BATTERY DATA ---")
                 _LOGGER.debug("Realtime data batPower: %s", data.get('batPower'))
                 _LOGGER.debug("Realtime data batEnergyPercent: %s", data.get('batEnergyPercent'))
                 _LOGGER.debug("Realtime data batteryDirection: %s", data.get('batteryDirection'))
-                _LOGGER.debug("Realtime data batTempC: %s", data.get('batTempC'))
-                _LOGGER.debug("Realtime data sinkTempC: %s", data.get('sinkTempC'))
                 _LOGGER.debug("Realtime data todayBatChgEnergy: %s", data.get('todayBatChgEnergy'))
                 _LOGGER.debug("Realtime data todayBatDisEnergy: %s", data.get('todayBatDisEnergy'))
                 _LOGGER.debug("Realtime data totalBatChgEnergy: %s", data.get('totalBatChgEnergy'))
                 _LOGGER.debug("Realtime data totalBatDisEnergy: %s", data.get('totalBatDisEnergy'))
+                
+                # Load-related data
+                _LOGGER.debug("--- LOAD DATA ---")
+                _LOGGER.debug("Realtime data sysTotalLoadWatt: %s", data.get('sysTotalLoadWatt'))
                 _LOGGER.debug("Realtime data todayLoadEnergy: %s", data.get('todayLoadEnergy'))
+                
+                # PV-related data
+                _LOGGER.debug("--- PV DATA ---")
                 _LOGGER.debug("Realtime data todayPvEnergy: %s", data.get('todayPvEnergy'))
                 _LOGGER.debug("Realtime data totalPvEnergy: %s", data.get('totalPvEnergy'))
-                _LOGGER.debug("Realtime data todaySellEnergy: %s", data.get('todaySellEnergy'))
-                _LOGGER.debug("Realtime data todayFeedInEnergy: %s", data.get('todayFeedInEnergy'))
+                _LOGGER.debug("Realtime data totalPVPower: %s", data.get('totalPVPower'))
+                
+                # Temperature data
+                _LOGGER.debug("--- TEMPERATURE DATA ---")
+                _LOGGER.debug("Realtime data batTempC: %s", data.get('batTempC'))
+                _LOGGER.debug("Realtime data sinkTempC: %s", data.get('sinkTempC'))
+                
+                # Operating mode data
+                _LOGGER.debug("--- OPERATING MODE DATA ---")
+                _LOGGER.debug("Realtime data mpvMode: %s", data.get('mpvMode'))
+                
+                # Additional energy data
+                _LOGGER.debug("--- ADDITIONAL ENERGY DATA ---")
+                _LOGGER.debug("Realtime data totalSellEnergy: %s", data.get('totalSellEnergy'))
+                _LOGGER.debug("Realtime data totalFeedInEnergy: %s", data.get('totalFeedInEnergy'))
+                _LOGGER.debug("Realtime data totalTotalLoadEnergy: %s", data.get('totalTotalLoadEnergy'))
 
                 # Grid power from sysGridPowerWatt
                 grid_power = float(data.get('sysGridPowerWatt', 0))
                 processed["grid_power_abs"] = abs(grid_power)
-                # Grid direction based on gridDirection (-1 for exporting, 1 for importing)
+                # Grid direction based on gridDirection (1 for exporting/selling, -1 for importing/feeding in)
                 grid_direction_value = int(data.get('gridDirection', 0))
-                grid_direction = "exporting" if grid_direction_value == -1 else "importing" if grid_direction_value == 1 else "idle"
+                grid_direction = "exporting" if grid_direction_value == 1 else "importing" if grid_direction_value == -1 else "idle"
                 processed["grid_status_calculated"] = grid_direction
 
                 # Home load from sysTotalLoadWatt
@@ -381,9 +412,9 @@ class SajApiClient:
                 # Battery status from batteryDirection (0 for idle)
                 bat_direction = int(data.get('batteryDirection', 0))
                 if bat_direction == 0:
-                    bat_status = "idle"
+                    bat_status = "Standby"
                 else:
-                    bat_status = "discharging" if bat_power > 0 else "charging"
+                    bat_status = "Discharging" if bat_power > 0 else "Charging"
                 processed["battery_status_calculated"] = bat_status
                 
                 # Temperature values
@@ -406,9 +437,58 @@ class SajApiClient:
                 processed["today_pv_energy"] = float(data.get('todayPvEnergy', 0))
                 processed["total_pv_energy"] = float(data.get('totalPvEnergy', 0))
                 
+                # Process current PV power from totalPVPower field
+                if 'totalPVPower' in data:
+                    try:
+                        processed["total_pv_power_calculated"] = float(data.get('totalPVPower', 0))
+                    except (ValueError, TypeError):
+                        _LOGGER.warning("Could not convert totalPVPower value to float: %s", data.get('totalPVPower'))
+                
                 # Grid energy exchange values
                 processed["today_grid_export_energy"] = float(data.get('todaySellEnergy', 0))
                 processed["today_grid_import_energy"] = float(data.get('todayFeedInEnergy', 0))
+                
+                # Add total grid export energy if available
+                if 'totalSellEnergy' in data:
+                    try:
+                        processed["total_grid_export"] = float(data.get('totalSellEnergy', 0))
+                    except (ValueError, TypeError):
+                        _LOGGER.warning("Could not convert totalSellEnergy value to float: %s", data.get('totalSellEnergy'))
+                
+                # Add total grid import energy if available
+                if 'totalFeedInEnergy' in data:
+                    try:
+                        processed["total_grid_import"] = float(data.get('totalFeedInEnergy', 0))
+                    except (ValueError, TypeError):
+                        _LOGGER.warning("Could not convert totalFeedInEnergy value to float: %s", data.get('totalFeedInEnergy'))
+                
+                # Add total load energy if available
+                if 'totalTotalLoadEnergy' in data:
+                    try:
+                        processed["total_load_energy"] = float(data.get('totalTotalLoadEnergy', 0))
+                    except (ValueError, TypeError):
+                        _LOGGER.warning("Could not convert totalTotalLoadEnergy value to float: %s", data.get('totalTotalLoadEnergy'))
+                
+                # Add operating mode/status from mpvMode if available
+                if 'mpvMode' in data:
+                    try:
+                        mpv_mode = int(data.get('mpvMode', 0))
+                        processed["operating_mode"] = mpv_mode
+                        processed["operating_status"] = mpv_mode
+                    except (ValueError, TypeError):
+                        _LOGGER.warning("Could not convert mpvMode value to int: %s", data.get('mpvMode'))
+                
+                # Calculate estimated annual production and savings
+                if 'todayPvEnergy' in data:
+                    try:
+                        today_energy = float(data.get('todayPvEnergy', 0))
+                        days_passed = datetime.now().timetuple().tm_yday  # Day of the year
+                        if days_passed > 0:
+                            processed["estimated_annual_production"] = today_energy / days_passed * 365
+                            # Estimate financial savings (using $0.15/kWh as an example)
+                            processed["estimated_annual_savings"] = processed["estimated_annual_production"] * 0.15
+                    except (ValueError, TypeError, ZeroDivisionError):
+                        pass
 
                 return processed
 
@@ -418,21 +498,32 @@ class SajApiClient:
             
         # Process data fields using history data format
         
-        # 1. PV power calculations
+        # Log device type
+        _LOGGER.debug("Device type: solar")
+        
+        # Log history data fields for solar devices
+        # PV power calculations
+        _LOGGER.debug("--- PV DATA ---")
         total_pv_power = 0
         for i in range(1, 17):  # Check all possible PV inputs
             pv_power_key = f"pv{i}power"
             if pv_power_key in data and data[pv_power_key]:
+                _LOGGER.debug("History data %s: %s", pv_power_key, data.get(pv_power_key))
                 try:
                     pv_power = float(data[pv_power_key])
                     total_pv_power += pv_power
                     processed[f"pv{i}_power"] = pv_power
                 except (ValueError, TypeError):
                     pass
+        
+        if "totalPVPower" in data:
+            _LOGGER.debug("History data totalPVPower: %s", data.get("totalPVPower"))
                     
         processed["total_pv_power_calculated"] = total_pv_power
         
-        # 2. Grid status and power
+        # Grid status and power
+        _LOGGER.debug("--- GRID DATA ---")
+        _LOGGER.debug("History data totalGridPowerWatt: %s", data.get('totalGridPowerWatt'))
         try:
             grid_power = float(data.get('totalGridPowerWatt', 0))
             grid_direction = "exporting" if grid_power < 0 else "importing" if grid_power > 0 else "idle"
@@ -441,29 +532,34 @@ class SajApiClient:
         except (ValueError, TypeError):
             pass
             
-        # 3. Battery status (for battery devices)
+        # Battery status (for battery devices)
         if device_type == DEVICE_TYPE_BATTERY:
+            _LOGGER.debug("--- BATTERY DATA ---")
+            _LOGGER.debug("History data batPower: %s", data.get("batPower"))
+            _LOGGER.debug("History data batEnergyPercent: %s", data.get("batEnergyPercent"))
             try:
                 bat_power = float(data.get("batPower", 0))
                 if bat_power > 0:
-                    bat_status = "discharging"
+                    bat_status = "Discharging"
                 elif bat_power < 0:
-                    bat_status = "charging"
+                    bat_status = "Charging"
                 else:
-                    bat_status = "idle"
+                    bat_status = "Standby"
                 processed["battery_status_calculated"] = bat_status
                 processed["battery_power_abs"] = abs(bat_power)
             except (ValueError, TypeError):
                 pass
                 
-        # 4. Device type specific processing
+        # Device type specific processing
         if device_type == DEVICE_TYPE_SOLAR:
             # For R6: Calculate combined phase values
+            _LOGGER.debug("--- PHASE DATA ---")
             try:
                 total_phase_power = 0
                 for phase in ["r", "s", "t"]:
                     phase_power_key = f"{phase}GridPowerWatt"
                     if phase_power_key in data and data[phase_power_key]:
+                        _LOGGER.debug("History data %s: %s", phase_power_key, data.get(phase_power_key))
                         phase_power = float(data[phase_power_key])
                         total_phase_power += phase_power
                         processed[f"{phase}_phase_power"] = phase_power
@@ -471,7 +567,10 @@ class SajApiClient:
             except (ValueError, TypeError):
                 pass
                 
-        # 5. Temperature values
+        # Temperature values
+        _LOGGER.debug("--- TEMPERATURE DATA ---")
+        _LOGGER.debug("History data invTempC: %s", data.get("invTempC"))
+        _LOGGER.debug("History data sinkTempC: %s", data.get("sinkTempC"))
         try:
             if "invTempC" in data and data["invTempC"]:
                 processed["inverter_temp"] = float(data["invTempC"])
@@ -480,8 +579,12 @@ class SajApiClient:
         except (ValueError, TypeError):
             pass
             
-        # 6. Process plant statistics data
+        # Process plant statistics data
         if plant_stats:
+            _LOGGER.debug("--- PLANT STATISTICS ---")
+            _LOGGER.debug("Plant stats totalReduceCo2: %s", plant_stats.get("totalReduceCo2"))
+            _LOGGER.debug("Plant stats totalPlantTreeNum: %s", plant_stats.get("totalPlantTreeNum"))
+            _LOGGER.debug("Plant stats yearPvEnergy: %s", plant_stats.get("yearPvEnergy"))
             try:
                 # Environmental impact
                 if "totalReduceCo2" in plant_stats:
