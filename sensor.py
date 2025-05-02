@@ -645,6 +645,15 @@ class SajGridPowerSensor(SajBaseSensor):
             # Return the raw grid power value
             return grid_power
         
+        # For solar devices, check for grid_power_abs in processed data first
+        if device_type == DEVICE_TYPE_SOLAR and "grid_power_abs" in processed_data:
+            grid_power = processed_data["grid_power_abs"]
+            # Apply sign based on grid status
+            grid_status = processed_data.get("grid_status_calculated", "")
+            if grid_status == "exporting":
+                return -grid_power  # Make negative for exporting
+            return grid_power
+        
         # Fall back to history data
         history_data = self._get_history_data()
         if "totalGridPowerWatt" in history_data:
