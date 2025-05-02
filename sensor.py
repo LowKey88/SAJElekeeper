@@ -393,6 +393,18 @@ class SajTodayEnergySensor(SajBaseSensor):
             except (ValueError, TypeError):
                 pass
             
+        # Check load monitoring data for solar devices
+        if device_type == DEVICE_TYPE_SOLAR and "load_monitoring" in device_data:
+            load_monitoring = device_data["load_monitoring"]
+            if load_monitoring and "total" in load_monitoring:
+                total = load_monitoring["total"]
+                if "pvEnergy" in total:
+                    try:
+                        _LOGGER.debug("Using load monitoring pvEnergy for today's generation: %s", total["pvEnergy"])
+                        return float(total["pvEnergy"])
+                    except (ValueError, TypeError):
+                        pass
+            
         # Last resort: plant statistics
         plant_stats = self._get_plant_stats()
         if "todayPvEnergy" in plant_stats:

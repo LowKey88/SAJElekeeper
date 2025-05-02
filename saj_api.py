@@ -790,6 +790,15 @@ class SajApiClient:
                 # Log the energy values
                 _LOGGER.debug("Load monitoring buyEnergy: %s", total_values.get("buyEnergy"))
                 _LOGGER.debug("Load monitoring sellEnergy: %s", total_values.get("sellEnergy"))
+                _LOGGER.debug("Load monitoring pvEnergy: %s", total_values.get("pvEnergy"))
+                
+                if "pvEnergy" in total_values:
+                    try:
+                        pv_energy = float(total_values["pvEnergy"])
+                        processed["today_pv_energy"] = pv_energy
+                        _LOGGER.debug("Stored load monitoring pvEnergy in processed data: %s", pv_energy)
+                    except (ValueError, TypeError):
+                        pass
                 
                 if "loadEnergy" in total_values:
                     try:
