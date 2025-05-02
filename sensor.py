@@ -146,7 +146,6 @@ async def async_setup_entry(
                 SajBatteryRoundTripEfficiencySensor(coordinator, device_sn, device_name),
                 SajTodayLoadEnergySensor(coordinator, device_sn, device_name),
                 SajTotalLoadEnergySensor(coordinator, device_sn, device_name),
-                SajTodayGridImportEnergySensor(coordinator, device_sn, device_name),
                 SajTotalGridImportSensor(coordinator, device_sn, device_name),
             ])
             
