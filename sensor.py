@@ -131,23 +131,23 @@ async def async_setup_entry(
                         SajGridPhaseFrequencySensor(coordinator, device_sn, device_name, phase),
                     ])
         
-            # Add battery-specific entities
-            if device_type == DEVICE_TYPE_BATTERY:
-                entities.extend([
-                    SajBatteryLevelSensor(coordinator, device_sn, device_name),
-                    SajBatteryPowerSensor(coordinator, device_sn, device_name),
-                    SajBatteryStatusSensor(coordinator, device_sn, device_name),
-                    SajBatteryTemperatureSensor(coordinator, device_sn, device_name),
-                    SajTodayBatteryChargeSensor(coordinator, device_sn, device_name),
-                    SajTodayBatteryDischargeSensor(coordinator, device_sn, device_name),
-                    SajTotalBatteryChargeSensor(coordinator, device_sn, device_name),
-                    SajTotalBatteryDischargeSensor(coordinator, device_sn, device_name),
-                    SajBatteryRoundTripEfficiencySensor(coordinator, device_sn, device_name),
-                    SajTodayLoadEnergySensor(coordinator, device_sn, device_name),
-                    SajTotalLoadEnergySensor(coordinator, device_sn, device_name),
-                    SajTodayGridImportEnergySensor(coordinator, device_sn, device_name),
-                    SajTotalGridImportSensor(coordinator, device_sn, device_name),
-                ])
+        # Add battery-specific entities
+        if device_type == DEVICE_TYPE_BATTERY:
+            entities.extend([
+                SajBatteryLevelSensor(coordinator, device_sn, device_name),
+                SajBatteryPowerSensor(coordinator, device_sn, device_name),
+                SajBatteryStatusSensor(coordinator, device_sn, device_name),
+                SajBatteryTemperatureSensor(coordinator, device_sn, device_name),
+                SajTodayBatteryChargeSensor(coordinator, device_sn, device_name),
+                SajTodayBatteryDischargeSensor(coordinator, device_sn, device_name),
+                SajTotalBatteryChargeSensor(coordinator, device_sn, device_name),
+                SajTotalBatteryDischargeSensor(coordinator, device_sn, device_name),
+                SajBatteryRoundTripEfficiencySensor(coordinator, device_sn, device_name),
+                SajTodayLoadEnergySensor(coordinator, device_sn, device_name),
+                SajTotalLoadEnergySensor(coordinator, device_sn, device_name),
+                SajTodayGridImportEnergySensor(coordinator, device_sn, device_name),
+                SajTotalGridImportSensor(coordinator, device_sn, device_name),
+            ])
             
             # Add backup load power if available
             device_data = coordinator.data.get(device_sn, {})
