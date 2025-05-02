@@ -16,7 +16,7 @@ A Home Assistant custom component for monitoring SAJ solar inverters and battery
 1. Make sure [HACS](https://hacs.xyz/) is installed in your Home Assistant instance.
 2. Add this repository as a custom repository in HACS:
    - Go to HACS > Integrations > ⋮ > Custom repositories
-   - Add `https://github.com/lowkey88/saj_monitor` as a repository
+   - Add `https://github.com/lowkey88/SAJMonitor` as a repository
    - Select "Integration" as the category
 3. Click "Download" on the SAJ Monitor integration
 4. Restart Home Assistant
