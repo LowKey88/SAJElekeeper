@@ -760,6 +760,11 @@ class SajApiClient:
             # Process load monitoring energy data (works 24/7)
             if load_monitoring:
                 total_values = load_monitoring.get("total", {})
+                
+                # Log the energy values
+                _LOGGER.debug("Load monitoring buyEnergy: %s", total_values.get("buyEnergy"))
+                _LOGGER.debug("Load monitoring sellEnergy: %s", total_values.get("sellEnergy"))
+                
                 if "loadEnergy" in total_values:
                     try:
                         processed["total_load_energy"] = float(total_values["loadEnergy"])
@@ -769,6 +774,7 @@ class SajApiClient:
                 if "buyEnergy" in total_values:
                     try:
                         processed["total_grid_import"] = float(total_values["buyEnergy"])
+                        processed["today_grid_import_energy"] = float(total_values["buyEnergy"])
                     except (ValueError, TypeError):
                         pass
                 
@@ -778,6 +784,7 @@ class SajApiClient:
                         sell_energy = float(total_values["sellEnergy"])
                         if "total_grid_export" not in processed:
                             processed["total_grid_export"] = sell_energy
+                        processed["today_grid_export_energy"] = sell_energy
                     except (ValueError, TypeError):
                         pass
             
