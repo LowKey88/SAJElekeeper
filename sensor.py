@@ -89,6 +89,7 @@ async def async_setup_entry(
             SajGridStatusSensor(coordinator, device_sn, device_name),
             SajTodayGridExportSensor(coordinator, device_sn, device_name),
             SajTotalGridExportSensor(coordinator, device_sn, device_name),
+            SajTodayGridImportEnergySensor(coordinator, device_sn, device_name),
         ])
         
         # Add environmental impact sensors
@@ -727,7 +728,18 @@ class SajTodayGridExportSensor(SajBaseSensor):
             if "today_grid_export_energy" in processed_data:
                 return processed_data["today_grid_export_energy"]
         
-        # For non-battery devices, try history data first
+        # For solar devices, check for load monitoring data first
+        if device_type == DEVICE_TYPE_SOLAR and "load_monitoring" in device_data:
+            load_monitoring = device_data["load_monitoring"]
+            if load_monitoring and "total" in load_monitoring:
+                total = load_monitoring["total"]
+                if "sellEnergy" in total:
+                    try:
+                        return float(total["sellEnergy"])
+                    except (ValueError, TypeError):
+                        pass
+        
+        # Fall back to history data
         history_data = self._get_history_data()
         if "todaySellEnergy" in history_data:
             try:
@@ -1614,8 +1626,34 @@ class SajTodayGridImportEnergySensor(SajBaseSensor):
    @property
    def native_value(self):
        """Return the state of the sensor."""
-       processed_data = self._get_processed_data()
-       return processed_data.get("today_grid_import_energy")
+       device_data = self._get_device_data()
+       device_type = device_data.get("device_type")
+       
+       # For battery devices, use processed data
+       if device_type == DEVICE_TYPE_BATTERY:
+           processed_data = self._get_processed_data()
+           return processed_data.get("today_grid_import_energy")
+       
+       # For solar devices, check for load monitoring data first
+       if device_type == DEVICE_TYPE_SOLAR and "load_monitoring" in device_data:
+           load_monitoring = device_data["load_monitoring"]
+           if load_monitoring and "total" in load_monitoring:
+               total = load_monitoring["total"]
+               if "buyEnergy" in total:
+                   try:
+                       return float(total["buyEnergy"])
+                   except (ValueError, TypeError):
+                       pass
+       
+       # Fall back to history data if available
+       history_data = self._get_history_data()
+       if "todayFeedInEnergy" in history_data:
+           try:
+               return float(history_data["todayFeedInEnergy"])
+           except (ValueError, TypeError):
+               pass
+           
+       return None
 
 class SajTotalGridImportSensor(SajBaseSensor):
    """Sensor for SAJ total grid import energy."""
