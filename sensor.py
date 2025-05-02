@@ -291,31 +291,59 @@ class SajCurrentPowerSensor(SajBaseSensor):
             unit_of_measurement=UnitOfPower.WATT,
         )
 
+    def _get_realtime_data(self):
+        """Get realtime data from coordinator."""
+        device_data = self._get_device_data()
+        if not device_data:
+            return {}
+        realtime_data = device_data.get("realtime_data")
+        return realtime_data if isinstance(realtime_data, dict) else {}
+        
     @property
     def native_value(self):
         """Return the state of the sensor."""
         device_data = self._get_device_data()
+        device_type = device_data.get("device_type")
         
-        # First try plant statistics (more accurate)
+        # First try plant statistics (most accurate)
         plant_stats = self._get_plant_stats()
         power_now = plant_stats.get("powerNow")
         if power_now is not None:
             return float(power_now)
-            
-        # Fall back to calculated value from processed data
+        
+        # For solar devices, check if we have realtime data
+        if device_type == DEVICE_TYPE_SOLAR:
+            realtime_data = self._get_realtime_data()
+            if realtime_data and realtime_data.get("isOnline") == "1":
+                # Try to get totalPVPower from realtime data
+                if "totalPVPower" in realtime_data and realtime_data["totalPVPower"] != "0":
+                    try:
+                        return float(realtime_data["totalPVPower"])
+                    except (ValueError, TypeError):
+                        pass
+                
+                # If totalPVPower is not available or zero, calculate from individual PV inputs
+                total_power = 0
+                for i in range(1, 17):
+                    pv_power_key = f"pv{i}power"
+                    if pv_power_key in realtime_data and realtime_data[pv_power_key]:
+                        try:
+                            total_power += float(realtime_data[pv_power_key])
+                        except (ValueError, TypeError):
+                            pass
+                if total_power > 0:
+                    return total_power
+        
+        # Fall back to processed data (which handles nighttime with 0 values)
         processed_data = self._get_processed_data()
         calc_power = processed_data.get("total_pv_power_calculated")
         if calc_power is not None:
             return calc_power
-            
-        # Last resort: try to get from history data
-        history_data = self._get_history_data()
-        if "totalPVPower" in history_data:
-            try:
-                return float(history_data["totalPVPower"])
-            except (ValueError, TypeError):
-                pass
-            
+        
+        # If all else fails, return 0 for solar devices at night
+        if device_type == DEVICE_TYPE_SOLAR:
+            return 0
+        
         return None
 
 class SajTodayEnergySensor(SajBaseSensor):
@@ -335,6 +363,14 @@ class SajTodayEnergySensor(SajBaseSensor):
             unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         )
 
+    def _get_realtime_data(self):
+        """Get realtime data from coordinator."""
+        device_data = self._get_device_data()
+        if not device_data:
+            return {}
+        realtime_data = device_data.get("realtime_data")
+        return realtime_data if isinstance(realtime_data, dict) else {}
+        
     @property
     def native_value(self):
         """Return the state of the sensor."""
@@ -342,9 +378,19 @@ class SajTodayEnergySensor(SajBaseSensor):
         device_type = device_data.get("device_type")
         processed_data = self._get_processed_data()
 
-        # For battery devices, try processed data which includes realtime data
-        if device_type == DEVICE_TYPE_BATTERY and "today_pv_energy" in processed_data:
+        # For all device types, try processed data first
+        if "today_pv_energy" in processed_data:
             return processed_data["today_pv_energy"]
+
+        # For solar devices, check if we have realtime data
+        if device_type == DEVICE_TYPE_SOLAR:
+            realtime_data = self._get_realtime_data()
+            if realtime_data and realtime_data.get("isOnline") == "1":
+                if "todayPvEnergy" in realtime_data:
+                    try:
+                        return float(realtime_data["todayPvEnergy"])
+                    except (ValueError, TypeError):
+                        pass
 
         # Fall back to history data
         history_data = self._get_history_data()
@@ -361,6 +407,10 @@ class SajTodayEnergySensor(SajBaseSensor):
                 return float(plant_stats["todayPvEnergy"])
             except (ValueError, TypeError):
                 pass
+            
+        # If all else fails, return 0 for solar devices at night
+        if device_type == DEVICE_TYPE_SOLAR:
+            return 0
             
         return None
 
@@ -381,19 +431,35 @@ class SajTotalEnergySensor(SajBaseSensor):
             unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         )
 
+    def _get_realtime_data(self):
+        """Get realtime data from coordinator."""
+        device_data = self._get_device_data()
+        if not device_data:
+            return {}
+        realtime_data = device_data.get("realtime_data")
+        return realtime_data if isinstance(realtime_data, dict) else {}
+        
     @property
     def native_value(self):
         """Return the state of the sensor."""
         device_data = self._get_device_data()
         device_type = device_data.get("device_type")
+        processed_data = self._get_processed_data()
         
-        # For battery devices, try processed data which includes realtime data
-        if device_type == DEVICE_TYPE_BATTERY:
-            processed_data = self._get_processed_data()
-            if "total_pv_energy" in processed_data:
-                return processed_data["total_pv_energy"]
+        # For all device types, try processed data first
+        if "total_pv_energy" in processed_data:
+            return processed_data["total_pv_energy"]
         
-        # For non-battery devices, try history data first
+        # For solar devices, check if we have realtime data
+        if device_type == DEVICE_TYPE_SOLAR:
+            realtime_data = self._get_realtime_data()
+            if realtime_data and "totalPvEnergy" in realtime_data:
+                try:
+                    return float(realtime_data["totalPvEnergy"])
+                except (ValueError, TypeError):
+                    pass
+        
+        # For non-battery devices, try history data
         history_data = self._get_history_data()
         if "totalPvEnergy" in history_data:
             try:

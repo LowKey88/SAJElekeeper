@@ -299,32 +299,82 @@ class SajApiClient:
         plant_stats = await self.get_plant_statistics(plant_id)
         device_info = await self.get_device_details(device_sn)
         
-        # Only fetch load monitoring data for non-battery devices
+        # Always fetch load monitoring data for solar devices (works 24/7)
         load_monitoring = None
-        if device_type != DEVICE_TYPE_BATTERY:
+        if device_type == DEVICE_TYPE_SOLAR:
+            load_monitoring = await self.get_load_monitoring_data(plant_id)
+        elif device_type != DEVICE_TYPE_BATTERY:
+            # For other non-battery devices
             load_monitoring = await self.get_load_monitoring_data(plant_id)
 
         # For battery devices, use only realtime data
-        # For non-battery devices, use history data
+        # For solar devices, try both realtime and history data, but don't fail if they're unavailable
         history_data = None
         realtime_data = None
         
         if device_type == DEVICE_TYPE_BATTERY:
-            # Battery devices use realtime data
+            # Battery devices use realtime data exclusively
             realtime_data = await self.get_realtime_data(device_sn)
             if not realtime_data:
                 _LOGGER.error("Failed to get realtime data for battery device %s", device_sn)
                 return None
+        elif device_type == DEVICE_TYPE_SOLAR:
+            # Solar devices - try to get both realtime and history data
+            # But don't fail if they're unavailable (nighttime operation)
+            realtime_data = await self.get_realtime_data(device_sn)
+            history_data = await self.get_history_data(device_sn, plant_id)
+            
+            # For solar devices at night, both realtime and history might be unavailable
+            # That's okay, we'll use load monitoring data
+            if not history_data and not realtime_data:
+                _LOGGER.info("Both realtime and history data unavailable for solar device %s - likely nighttime", device_sn)
+                # Make sure we have at least load monitoring data
+                if not load_monitoring:
+                    _LOGGER.error("No data available for solar device %s", device_sn)
+                    return None
         else:
-            # Non-battery devices use history data
+            # Other non-battery, non-solar devices use history data
             history_data = await self.get_history_data(device_sn, plant_id)
             if not history_data:
                 _LOGGER.error("Failed to get history data for device %s", device_sn)
                 return None
 
         # Process data based on device type and available data
-        data_to_process = realtime_data if device_type == DEVICE_TYPE_BATTERY else history_data
-        processed_data = self._process_device_data(data_to_process, plant_stats, device_type, is_realtime=(device_type == DEVICE_TYPE_BATTERY))
+        # For solar, use realtime data if available, then history data, then load monitoring
+        is_realtime = False
+        data_to_process = None
+        
+        if device_type == DEVICE_TYPE_BATTERY:
+            is_realtime = True
+            data_to_process = realtime_data
+        elif device_type == DEVICE_TYPE_SOLAR:
+            # For solar, prioritize data sources
+            if realtime_data and realtime_data.get("isOnline") == "1":
+                is_realtime = True
+                data_to_process = realtime_data
+                _LOGGER.debug("Using realtime data for solar device %s", device_sn)
+            elif history_data:
+                is_realtime = False
+                data_to_process = history_data
+                _LOGGER.debug("Using history data for solar device %s", device_sn)
+            else:
+                # No realtime or history data available (nighttime)
+                # We'll use an empty dict and rely on load monitoring data
+                is_realtime = False
+                data_to_process = {}
+                _LOGGER.debug("Using empty data for solar device %s (nighttime)", device_sn)
+        else:
+            # Other device types
+            is_realtime = False
+            data_to_process = history_data
+        
+        processed_data = self._process_device_data(
+            data_to_process, 
+            plant_stats, 
+            device_type, 
+            is_realtime=is_realtime,
+            load_monitoring=load_monitoring  # Pass load monitoring data for nighttime operation
+        )
         
         # Combine all data into a single dictionary
         return {
@@ -336,11 +386,11 @@ class SajApiClient:
             "processed_data": processed_data,
         }
     
-    def _process_device_data(self, data, plant_stats, device_type, is_realtime=False):
+    def _process_device_data(self, data, plant_stats, device_type, is_realtime=False, load_monitoring=None):
         """Process device data to create calculated fields."""
         processed = {}
         
-        if not data:
+        if not data and device_type != DEVICE_TYPE_SOLAR:
             return processed
 
         if is_realtime and device_type == DEVICE_TYPE_BATTERY:
@@ -496,42 +546,242 @@ class SajApiClient:
                 _LOGGER.error("Error processing realtime data: %s", ex)
                 return processed
             
-        # Process data fields using history data format
-        
-        # Log device type
-        _LOGGER.debug("Device type: solar")
-        
-        # Log history data fields for solar devices
-        # PV power calculations
-        _LOGGER.debug("--- PV DATA ---")
-        total_pv_power = 0
-        for i in range(1, 17):  # Check all possible PV inputs
-            pv_power_key = f"pv{i}power"
-            if pv_power_key in data and data[pv_power_key]:
-                _LOGGER.debug("History data %s: %s", pv_power_key, data.get(pv_power_key))
+        # For solar devices, process data with special handling for nighttime
+        if device_type == DEVICE_TYPE_SOLAR:
+            # Check if we're likely in nighttime mode (empty data)
+            is_nighttime = not data or (is_realtime and data.get("isOnline") != "1")
+            
+            if is_nighttime:
+                _LOGGER.debug("Solar inverter appears to be offline (nighttime)")
+            
+            # Process PV data - set to 0 during nighttime
+            _LOGGER.debug("--- PV DATA ---")
+            if is_nighttime:
+                # During nighttime, all PV values are 0
+                processed["total_pv_power_calculated"] = 0
+                for i in range(1, 17):
+                    processed[f"pv{i}_power"] = 0
+                _LOGGER.debug("Nighttime operation - all PV values set to 0")
+            else:
+                # Normal daytime operation - process PV data
+                total_pv_power = 0
+                for i in range(1, 17):  # Check all possible PV inputs
+                    pv_power_key = f"pv{i}power"
+                    if pv_power_key in data and data[pv_power_key]:
+                        _LOGGER.debug("%s data %s: %s", 
+                                    "Realtime" if is_realtime else "History", 
+                                    pv_power_key, 
+                                    data.get(pv_power_key))
+                        try:
+                            pv_power = float(data[pv_power_key])
+                            total_pv_power += pv_power
+                            processed[f"pv{i}_power"] = pv_power
+                        except (ValueError, TypeError):
+                            pass
+                
+                # Check if totalPVPower is available in the data
+                if "totalPVPower" in data:
+                    _LOGGER.debug("%s data totalPVPower: %s", 
+                                "Realtime" if is_realtime else "History", 
+                                data.get("totalPVPower"))
+                    
+                    # Try to use totalPVPower from data if it's not zero
+                    try:
+                        reported_total = float(data.get("totalPVPower", 0))
+                        if reported_total > 0:
+                            processed["total_pv_power_calculated"] = reported_total
+                        else:
+                            # If totalPVPower is 0 but we calculated a non-zero sum, use our calculation
+                            processed["total_pv_power_calculated"] = total_pv_power if total_pv_power > 0 else 0
+                    except (ValueError, TypeError):
+                        # If conversion fails, use our calculated sum
+                        processed["total_pv_power_calculated"] = total_pv_power if total_pv_power > 0 else 0
+                else:
+                    # If totalPVPower is not in the data, use our calculated sum
+                    processed["total_pv_power_calculated"] = total_pv_power if total_pv_power > 0 else 0
+            
+            # Process grid data - prioritize load monitoring data
+            _LOGGER.debug("--- GRID DATA ---")
+            if load_monitoring:
+                # Use load monitoring data for grid power (works 24/7)
+                latest = load_monitoring.get("latest", {})
+                if "buyPower" in latest and "sellPower" in latest:
+                    try:
+                        buy_power = float(latest.get("buyPower", 0))
+                        sell_power = float(latest.get("sellPower", 0))
+                        
+                        # Net grid power (positive = importing, negative = exporting)
+                        grid_power = buy_power - sell_power
+                        
+                        _LOGGER.debug("Load monitoring buyPower: %s", buy_power)
+                        _LOGGER.debug("Load monitoring sellPower: %s", sell_power)
+                        _LOGGER.debug("Calculated grid power: %s", grid_power)
+                        
+                        grid_direction = "exporting" if grid_power < 0 else "importing" if grid_power > 0 else "idle"
+                        processed["grid_status_calculated"] = grid_direction
+                        processed["grid_power_abs"] = abs(grid_power)
+                    except (ValueError, TypeError):
+                        pass
+            elif not is_nighttime:
+                # Fall back to realtime/history data if load monitoring is unavailable
+                _LOGGER.debug("%s data totalGridPowerWatt: %s", 
+                            "Realtime" if is_realtime else "History", 
+                            data.get('totalGridPowerWatt'))
                 try:
-                    pv_power = float(data[pv_power_key])
-                    total_pv_power += pv_power
-                    processed[f"pv{i}_power"] = pv_power
+                    grid_power = float(data.get('totalGridPowerWatt', 0))
+                    grid_direction = "exporting" if grid_power < 0 else "importing" if grid_power > 0 else "idle"
+                    processed["grid_status_calculated"] = grid_direction
+                    processed["grid_power_abs"] = abs(grid_power)
                 except (ValueError, TypeError):
                     pass
-        
-        if "totalPVPower" in data:
-            _LOGGER.debug("History data totalPVPower: %s", data.get("totalPVPower"))
-                    
-        processed["total_pv_power_calculated"] = total_pv_power
-        
-        # Grid status and power
-        _LOGGER.debug("--- GRID DATA ---")
-        _LOGGER.debug("History data totalGridPowerWatt: %s", data.get('totalGridPowerWatt'))
-        try:
-            grid_power = float(data.get('totalGridPowerWatt', 0))
-            grid_direction = "exporting" if grid_power < 0 else "importing" if grid_power > 0 else "idle"
-            processed["grid_status_calculated"] = grid_direction
-            processed["grid_power_abs"] = abs(grid_power)
-        except (ValueError, TypeError):
-            pass
             
+            # Process home load power - prioritize load monitoring data
+            _LOGGER.debug("--- LOAD DATA ---")
+            if load_monitoring:
+                # Use load monitoring data for home load (works 24/7)
+                latest = load_monitoring.get("latest", {})
+                if "loadPower" in latest:
+                    try:
+                        load_power = float(latest.get("loadPower", 0))
+                        _LOGGER.debug("Load monitoring loadPower: %s", load_power)
+                        processed["home_load_power"] = load_power
+                    except (ValueError, TypeError):
+                        pass
+            elif not is_nighttime and "totalLoadPowerWatt" in data:
+                # Fall back to realtime/history data if load monitoring is unavailable
+                try:
+                    load_power = float(data.get("totalLoadPowerWatt", 0))
+                    processed["home_load_power"] = load_power
+                except (ValueError, TypeError):
+                    pass
+            
+            # Process phase data if available (only during daytime)
+            if not is_nighttime:
+                _LOGGER.debug("--- PHASE DATA ---")
+                try:
+                    total_phase_power = 0
+                    for phase in ["r", "s", "t"]:
+                        phase_power_key = f"{phase}GridPowerWatt"
+                        if phase_power_key in data and data[phase_power_key]:
+                            _LOGGER.debug("%s data %s: %s", 
+                                        "Realtime" if is_realtime else "History", 
+                                        phase_power_key, 
+                                        data.get(phase_power_key))
+                            phase_power = float(data[phase_power_key])
+                            total_phase_power += phase_power
+                            processed[f"{phase}_phase_power"] = phase_power
+                    processed["total_phase_power"] = total_phase_power
+                except (ValueError, TypeError):
+                    pass
+                
+            # Process temperature data (only during daytime)
+            if not is_nighttime:
+                _LOGGER.debug("--- TEMPERATURE DATA ---")
+                _LOGGER.debug("%s data invTempC: %s", 
+                            "Realtime" if is_realtime else "History", 
+                            data.get("invTempC"))
+                _LOGGER.debug("%s data sinkTempC: %s", 
+                            "Realtime" if is_realtime else "History", 
+                            data.get("sinkTempC"))
+                try:
+                    if "invTempC" in data and data["invTempC"]:
+                        processed["inverter_temp"] = float(data["invTempC"])
+                    if "sinkTempC" in data and data["sinkTempC"]:
+                        processed["sink_temp"] = float(data["sinkTempC"])
+                except (ValueError, TypeError):
+                    pass
+            
+            # Process plant statistics data (always available)
+            if plant_stats:
+                _LOGGER.debug("--- PLANT STATISTICS ---")
+                _LOGGER.debug("Plant stats totalReduceCo2: %s", plant_stats.get("totalReduceCo2"))
+                _LOGGER.debug("Plant stats totalPlantTreeNum: %s", plant_stats.get("totalPlantTreeNum"))
+                _LOGGER.debug("Plant stats yearPvEnergy: %s", plant_stats.get("yearPvEnergy"))
+                try:
+                    # Environmental impact
+                    if "totalReduceCo2" in plant_stats:
+                        processed["co2_reduction"] = float(plant_stats["totalReduceCo2"])
+                    if "totalPlantTreeNum" in plant_stats:
+                        processed["equivalent_trees"] = float(plant_stats["totalPlantTreeNum"])
+                        
+                    # Annual projections
+                    if "yearPvEnergy" in plant_stats:
+                        year_energy = float(plant_stats["yearPvEnergy"])
+                        days_passed = datetime.now().timetuple().tm_yday  # Day of the year
+                        if days_passed > 0:
+                            processed["estimated_annual_production"] = year_energy / days_passed * 365
+                            # Estimate financial savings (using $0.15/kWh as an example)
+                            processed["estimated_annual_savings"] = processed["estimated_annual_production"] * 0.15
+                except (ValueError, TypeError, ZeroDivisionError):
+                    pass
+            
+            # Process energy data - set to 0 during nighttime for today's values
+            if is_nighttime:
+                processed["today_pv_energy"] = 0
+            elif "todayPvEnergy" in data:
+                try:
+                    processed["today_pv_energy"] = float(data["todayPvEnergy"])
+                except (ValueError, TypeError):
+                    processed["today_pv_energy"] = 0
+            
+            # Total energy values should still be available from plant stats
+            if "totalPvEnergy" in data:
+                try:
+                    processed["total_pv_energy"] = float(data["totalPvEnergy"])
+                except (ValueError, TypeError):
+                    pass
+            elif plant_stats and "totalPvEnergy" in plant_stats:
+                try:
+                    processed["total_pv_energy"] = float(plant_stats["totalPvEnergy"])
+                except (ValueError, TypeError):
+                    pass
+            
+            # Process grid export/import data
+            if is_nighttime:
+                processed["today_grid_export_energy"] = 0
+            elif "todaySellEnergy" in data:
+                try:
+                    processed["today_grid_export_energy"] = float(data["todaySellEnergy"])
+                except (ValueError, TypeError):
+                    processed["today_grid_export_energy"] = 0
+            
+            # Total grid export should still be available
+            if "totalSellEnergy" in data:
+                try:
+                    processed["total_grid_export"] = float(data["totalSellEnergy"])
+                except (ValueError, TypeError):
+                    pass
+            elif plant_stats and "totalSellEnergy" in plant_stats:
+                try:
+                    processed["total_grid_export"] = float(plant_stats["totalSellEnergy"])
+                except (ValueError, TypeError):
+                    pass
+            
+            # Process load monitoring energy data (works 24/7)
+            if load_monitoring:
+                total_values = load_monitoring.get("total", {})
+                if "loadEnergy" in total_values:
+                    try:
+                        processed["total_load_energy"] = float(total_values["loadEnergy"])
+                    except (ValueError, TypeError):
+                        pass
+                
+                if "buyEnergy" in total_values:
+                    try:
+                        processed["total_grid_import"] = float(total_values["buyEnergy"])
+                    except (ValueError, TypeError):
+                        pass
+                
+                if "sellEnergy" in total_values:
+                    try:
+                        # Double-check this against total_grid_export
+                        sell_energy = float(total_values["sellEnergy"])
+                        if "total_grid_export" not in processed:
+                            processed["total_grid_export"] = sell_energy
+                    except (ValueError, TypeError):
+                        pass
+            
+            return processed
         # Battery status (for battery devices)
         if device_type == DEVICE_TYPE_BATTERY:
             _LOGGER.debug("--- BATTERY DATA ---")
