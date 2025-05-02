@@ -131,24 +131,23 @@ async def async_setup_entry(
                         SajGridPhaseFrequencySensor(coordinator, device_sn, device_name, phase),
                     ])
         
-        # Add battery-specific entities
-        if device_type == DEVICE_TYPE_BATTERY:
-            entities.extend([
-                SajBatteryLevelSensor(coordinator, device_sn, device_name),
-                SajBatteryPowerSensor(coordinator, device_sn, device_name),
-                SajBatteryStatusSensor(coordinator, device_sn, device_name),
-                SajBatteryTemperatureSensor(coordinator, device_sn, device_name),
-                SajTodayBatteryChargeSensor(coordinator, device_sn, device_name),
-                SajTodayBatteryDischargeSensor(coordinator, device_sn, device_name),
-                SajTotalBatteryChargeSensor(coordinator, device_sn, device_name),
-                SajTotalBatteryDischargeSensor(coordinator, device_sn, device_name),
-                SajBatteryRoundTripEfficiencySensor(coordinator, device_sn, device_name),
-                SajTodayLoadEnergySensor(coordinator, device_sn, device_name),
-                SajTotalLoadEnergySensor(coordinator, device_sn, device_name),
-                SajTodayGridExportEnergySensor(coordinator, device_sn, device_name),
-                SajTodayGridImportEnergySensor(coordinator, device_sn, device_name),
-                SajTotalGridImportSensor(coordinator, device_sn, device_name),
-            ])
+            # Add battery-specific entities
+            if device_type == DEVICE_TYPE_BATTERY:
+                entities.extend([
+                    SajBatteryLevelSensor(coordinator, device_sn, device_name),
+                    SajBatteryPowerSensor(coordinator, device_sn, device_name),
+                    SajBatteryStatusSensor(coordinator, device_sn, device_name),
+                    SajBatteryTemperatureSensor(coordinator, device_sn, device_name),
+                    SajTodayBatteryChargeSensor(coordinator, device_sn, device_name),
+                    SajTodayBatteryDischargeSensor(coordinator, device_sn, device_name),
+                    SajTotalBatteryChargeSensor(coordinator, device_sn, device_name),
+                    SajTotalBatteryDischargeSensor(coordinator, device_sn, device_name),
+                    SajBatteryRoundTripEfficiencySensor(coordinator, device_sn, device_name),
+                    SajTodayLoadEnergySensor(coordinator, device_sn, device_name),
+                    SajTotalLoadEnergySensor(coordinator, device_sn, device_name),
+                    SajTodayGridImportEnergySensor(coordinator, device_sn, device_name),
+                    SajTotalGridImportSensor(coordinator, device_sn, device_name),
+                ])
             
             # Add backup load power if available
             device_data = coordinator.data.get(device_sn, {})
@@ -1519,28 +1518,6 @@ class SajEstimatedAnnualSavingsSensor(SajBaseSensor):
        """Return the state attributes of the entity."""
        return {"unit": "$", "rate": "0.15 $/kWh"}
 
-class SajTodayGridExportEnergySensor(SajBaseSensor):
-   """Sensor for SAJ today's grid export energy."""
-
-   def __init__(self, coordinator, device_sn, device_name):
-       """Initialize the sensor."""
-       super().__init__(
-           coordinator=coordinator,
-           device_sn=device_sn,
-           device_name=device_name,
-           name_suffix="Today's Grid Export Energy",
-           unique_id_suffix="today_grid_export_energy",
-           icon=GRID_ICON,
-           device_class=SensorDeviceClass.ENERGY,
-           state_class=SensorStateClass.TOTAL_INCREASING,
-           unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-       )
-
-   @property
-   def native_value(self):
-       """Return the state of the sensor."""
-       processed_data = self._get_processed_data()
-       return processed_data.get("today_grid_export_energy")
 
 class SajTodayGridImportEnergySensor(SajBaseSensor):
    """Sensor for SAJ today's grid import energy."""
