@@ -1506,7 +1506,7 @@ class SajCO2ReductionSensor(SajBaseSensor):
            icon=CO2_ICON,
            device_class=SensorDeviceClass.WEIGHT,
            state_class=SensorStateClass.TOTAL,
-           unit_of_measurement="t",
+           unit_of_measurement="kg",
        )
 
    @property
@@ -1515,21 +1515,18 @@ class SajCO2ReductionSensor(SajBaseSensor):
        plant_stats = self._get_plant_stats()
        if "totalReduceCo2" in plant_stats:
            try:
-               return float(plant_stats["totalReduceCo2"])
+               tonnes = float(plant_stats["totalReduceCo2"])
+               return tonnes * 1000  # Convert from tonnes to kg
            except (ValueError, TypeError):
                pass
            
        # Try processed data
        processed_data = self._get_processed_data()
        if "co2_reduction" in processed_data:
-           return processed_data["co2_reduction"]
+           return processed_data["co2_reduction"] * 1000  # Convert from tonnes to kg
            
        return None
    
-   @property
-   def extra_state_attributes(self):
-         """Return the state attributes of the entity."""
-         return {"original_unit": "tonnes"}
    
 class SajEquivalentTreesSensor(SajBaseSensor):
    """Sensor for SAJ equivalent trees."""
