@@ -167,9 +167,19 @@ class SajApiClient:
                 history_resp = await self._session.get(history_url, params=history_params, headers=history_headers)
                 history_json = await history_resp.json()
 
-            if history_json.get("code") != 200 or "data" not in history_json:
+            if history_json.get("code") != 200:
                 _LOGGER.error("Error in history data response: %s", history_json.get("msg", "Unknown error"))
                 return None
+                
+            if "data" not in history_json:
+                # Special case: sometimes the API returns "request success" in the msg field
+                # but doesn't include any data - this is normal during nighttime
+                if history_json.get("msg") == "request success":
+                    _LOGGER.debug("History data API returned 'request success' but no data - likely nighttime")
+                    return {}
+                else:
+                    _LOGGER.error("No data in history data response: %s", history_json.get("msg", "Unknown error"))
+                    return None
 
             history_data = history_json["data"]
             
@@ -559,9 +569,25 @@ class SajApiClient:
             if is_nighttime:
                 # During nighttime, all PV values are 0
                 processed["total_pv_power_calculated"] = 0
-                for i in range(1, 17):
+                for i in range(1, 3):  # Just PV1 and PV2
+                    # Set power, voltage, and current to 0 for PV1 and PV2
                     processed[f"pv{i}_power"] = 0
-                _LOGGER.debug("Nighttime operation - all PV values set to 0")
+                    processed[f"pv{i}_voltage"] = 0
+                    processed[f"pv{i}_current"] = 0
+                _LOGGER.debug("Nighttime operation - PV1 and PV2 values (power, voltage, current) set to 0")
+                
+                # Set grid phase values to 0 during nighttime
+                for phase in ["r", "s", "t"]:
+                    processed[f"{phase}_phase_power"] = 0
+                    processed[f"{phase}_phase_voltage"] = 0
+                    processed[f"{phase}_phase_current"] = 0
+                    processed[f"{phase}_phase_frequency"] = 0
+                _LOGGER.debug("Nighttime operation - Grid phase values (power, voltage, current, frequency) set to 0")
+                
+                # Set default operating mode during nighttime
+                processed["operating_mode"] = 0
+                processed["operating_status"] = 1  # 1 = Waiting (Standby)
+                _LOGGER.debug("Nighttime operation - Operating mode set to 0, status set to 1 (Standby)")
             else:
                 # Normal daytime operation - process PV data
                 total_pv_power = 0

@@ -107,30 +107,23 @@ async def async_setup_entry(
         
         # Add solar-specific entities
         if device_type == DEVICE_TYPE_SOLAR:
-            # Add PV input entities for active inputs (up to 16 inputs for maximum compatibility)
-            for i in range(1, 17):
-                # Check if this PV input has data
-                device_data = coordinator.data.get(device_sn, {})
-                history_data = device_data.get("history_data", {})
-                key = f"pv{i}power"
-                if key in history_data and float(history_data.get(key, 0)) > 0:
-                    entities.extend([
-                        SajPVPowerSensor(coordinator, device_sn, device_name, i),
-                        SajPVVoltageSensor(coordinator, device_sn, device_name, i),
-                        SajPVCurrentSensor(coordinator, device_sn, device_name, i),
-                    ])
+            # Always create PV1 and PV2 sensors for solar devices
+            for i in range(1, 3):  # Just PV1 and PV2
+                _LOGGER.debug("Creating PV%d sensors for device %s", i, device_name)
+                entities.extend([
+                    SajPVPowerSensor(coordinator, device_sn, device_name, i),
+                    SajPVVoltageSensor(coordinator, device_sn, device_name, i),
+                    SajPVCurrentSensor(coordinator, device_sn, device_name, i),
+                ])
             
-            # Add grid phase information for R6
-            device_data = coordinator.data.get(device_sn, {})
-            history_data = device_data.get("history_data", {})
-            if history_data and "rGridPowerWatt" in history_data:
-                for phase in ["r", "s", "t"]:
-                    entities.extend([
-                        SajGridPhasePowerSensor(coordinator, device_sn, device_name, phase),
-                        SajGridPhaseVoltageSensor(coordinator, device_sn, device_name, phase),
-                        SajGridPhaseCurrentSensor(coordinator, device_sn, device_name, phase),
-                        SajGridPhaseFrequencySensor(coordinator, device_sn, device_name, phase),
-                    ])
+            # Add grid phase information for R6 - always create these sensors for solar devices
+            for phase in ["r", "s", "t"]:
+                entities.extend([
+                    SajGridPhasePowerSensor(coordinator, device_sn, device_name, phase),
+                    SajGridPhaseVoltageSensor(coordinator, device_sn, device_name, phase),
+                    SajGridPhaseCurrentSensor(coordinator, device_sn, device_name, phase),
+                    SajGridPhaseFrequencySensor(coordinator, device_sn, device_name, phase),
+                ])
         
         # Add battery-specific entities
         if device_type == DEVICE_TYPE_BATTERY:
@@ -193,7 +186,7 @@ class SajBaseSensor(CoordinatorEntity, SensorEntity):
                 )
             else:
                 # Fallback to basic device info if deviceInfo is not a dict
-                history_data = device_data.get("history_data", {})
+                history_data = device_data.get("history_data") or {}
                 device_sn_value = history_data.get("deviceSn", device_sn)
                 module_sn = history_data.get("moduleSn", "Unknown")
                 
@@ -235,7 +228,7 @@ class SajBaseSensor(CoordinatorEntity, SensorEntity):
         device_data = self._get_device_data()
         if not device_data:
             return {}
-        history_data = device_data.get("history_data")
+        history_data = device_data.get("history_data") or {}
         return history_data if isinstance(history_data, dict) else {}
     
     def _get_plant_stats(self):
@@ -243,7 +236,7 @@ class SajBaseSensor(CoordinatorEntity, SensorEntity):
         device_data = self._get_device_data()
         if not device_data:
             return {}
-        plant_stats = device_data.get("plant_stats")
+        plant_stats = device_data.get("plant_stats") or {}
         return plant_stats if isinstance(plant_stats, dict) else {}
     
     def _get_processed_data(self):
@@ -251,7 +244,7 @@ class SajBaseSensor(CoordinatorEntity, SensorEntity):
         device_data = self._get_device_data()
         if not device_data:
             return {}
-        processed_data = device_data.get("processed_data")
+        processed_data = device_data.get("processed_data") or {}
         return processed_data if isinstance(processed_data, dict) else {}
 
 class SajPlantNameSensor(SajBaseSensor):
@@ -559,17 +552,16 @@ class SajOperatingModeSensor(SajBaseSensor):
         device_data = self._get_device_data()
         device_type = device_data.get("device_type")
         
-        # For battery devices, try processed data which includes realtime data
-        if device_type == DEVICE_TYPE_BATTERY:
-            processed_data = self._get_processed_data()
-            if "operating_mode" in processed_data:
-                try:
-                    mode = int(processed_data["operating_mode"])
-                    return self._mode_descriptions.get(mode, f"Unknown mode ({mode})")
-                except (ValueError, TypeError):
-                    pass
+        # Try processed data first for all device types
+        processed_data = self._get_processed_data()
+        if "operating_mode" in processed_data:
+            try:
+                mode = int(processed_data["operating_mode"])
+                return self._mode_descriptions.get(mode, f"Unknown mode ({mode})")
+            except (ValueError, TypeError):
+                pass
         
-        # Fall back to history data for non-battery devices
+        # Fall back to history data if processed data is not available
         history_data = self._get_history_data()
         if "mpvMode" in history_data:
             try:
@@ -578,7 +570,8 @@ class SajOperatingModeSensor(SajBaseSensor):
             except (ValueError, TypeError):
                 pass
             
-        return None
+        # If no data is available, return a default value
+        return self._mode_descriptions.get(0, "Unknown")
 
 class SajInverterTemperatureSensor(SajBaseSensor):
     """Sensor for SAJ inverter temperature."""
@@ -827,18 +820,27 @@ class SajPVPowerSensor(SajBaseSensor):
         history_data = self._get_history_data()
         power_key = f"pv{self._pv_input}power"
         
+        _LOGGER.debug("PV%d Power - Checking for %s in history data", self._pv_input, power_key)
+        
         if power_key in history_data:
             try:
-                return float(history_data[power_key])
+                value = float(history_data[power_key])
+                _LOGGER.debug("PV%d Power - Found value: %s W", self._pv_input, value)
+                return value
             except (ValueError, TypeError):
-                pass
+                _LOGGER.debug("PV%d Power - Could not convert value to float: %s", self._pv_input, history_data[power_key])
+        else:
+            _LOGGER.debug("PV%d Power - Key not found in history data", self._pv_input)
             
         # Try processed data
         processed_data = self._get_processed_data()
         if f"pv{self._pv_input}_power" in processed_data:
-            return processed_data[f"pv{self._pv_input}_power"]
+            value = processed_data[f"pv{self._pv_input}_power"]
+            _LOGGER.debug("PV%d Power - Found in processed data: %s W", self._pv_input, value)
+            return value
             
-        return None
+        _LOGGER.debug("PV%d Power - No data found, returning 0", self._pv_input)
+        return 0  # Return 0 instead of None when no data is available
         
     @property
     def available(self):
@@ -846,24 +848,8 @@ class SajPVPowerSensor(SajBaseSensor):
         if not super().available:
             return False
             
-        # Get the PV power value
-        history_data = self._get_history_data()
-        power_key = f"pv{self._pv_input}power"
-        
-        if power_key in history_data:
-            try:
-                power_value = float(history_data[power_key])
-                # Only consider available if power is greater than 0
-                return power_value > 0
-            except (ValueError, TypeError):
-                pass
-                
-        # Try processed data
-        processed_data = self._get_processed_data()
-        if f"pv{self._pv_input}_power" in processed_data:
-            return processed_data[f"pv{self._pv_input}_power"] > 0
-            
-        return False
+        # Always return available if the device is available
+        return True
 
 class SajPVVoltageSensor(SajBaseSensor):
     """Sensor for SAJ PV input voltage."""
@@ -889,13 +875,27 @@ class SajPVVoltageSensor(SajBaseSensor):
         history_data = self._get_history_data()
         voltage_key = f"pv{self._pv_input}volt"
         
+        _LOGGER.debug("PV%d Voltage - Checking for %s in history data", self._pv_input, voltage_key)
+        
         if voltage_key in history_data:
             try:
-                return float(history_data[voltage_key])
+                value = float(history_data[voltage_key])
+                _LOGGER.debug("PV%d Voltage - Found value: %s V", self._pv_input, value)
+                return value
             except (ValueError, TypeError):
-                pass
+                _LOGGER.debug("PV%d Voltage - Could not convert value to float: %s", self._pv_input, history_data[voltage_key])
+        else:
+            _LOGGER.debug("PV%d Voltage - Key not found in history data", self._pv_input)
             
-        return None
+        # Try processed data
+        processed_data = self._get_processed_data()
+        if f"pv{self._pv_input}_voltage" in processed_data:
+            value = processed_data[f"pv{self._pv_input}_voltage"]
+            _LOGGER.debug("PV%d Voltage - Found in processed data: %s V", self._pv_input, value)
+            return value
+            
+        _LOGGER.debug("PV%d Voltage - No data found, returning 0", self._pv_input)
+        return 0  # Return 0 instead of None when no data is available
         
     @property
     def available(self):
@@ -903,18 +903,8 @@ class SajPVVoltageSensor(SajBaseSensor):
         if not super().available:
             return False
             
-        # Only consider available if the PV input has actual power
-        history_data = self._get_history_data()
-        power_key = f"pv{self._pv_input}power"
-        
-        if power_key in history_data:
-            try:
-                power_value = float(history_data[power_key])
-                return power_value > 0
-            except (ValueError, TypeError):
-                pass
-                
-        return False
+        # Always return available if the device is available
+        return True
 
 class SajPVCurrentSensor(SajBaseSensor):
     """Sensor for SAJ PV input current."""
@@ -940,13 +930,27 @@ class SajPVCurrentSensor(SajBaseSensor):
         history_data = self._get_history_data()
         current_key = f"pv{self._pv_input}curr"
         
+        _LOGGER.debug("PV%d Current - Checking for %s in history data", self._pv_input, current_key)
+        
         if current_key in history_data:
             try:
-                return float(history_data[current_key])
+                value = float(history_data[current_key])
+                _LOGGER.debug("PV%d Current - Found value: %s A", self._pv_input, value)
+                return value
             except (ValueError, TypeError):
-                pass
+                _LOGGER.debug("PV%d Current - Could not convert value to float: %s", self._pv_input, history_data[current_key])
+        else:
+            _LOGGER.debug("PV%d Current - Key not found in history data", self._pv_input)
             
-        return None
+        # Try processed data
+        processed_data = self._get_processed_data()
+        if f"pv{self._pv_input}_current" in processed_data:
+            value = processed_data[f"pv{self._pv_input}_current"]
+            _LOGGER.debug("PV%d Current - Found in processed data: %s A", self._pv_input, value)
+            return value
+            
+        _LOGGER.debug("PV%d Current - No data found, returning 0", self._pv_input)
+        return 0  # Return 0 instead of None when no data is available
         
     @property
     def available(self):
@@ -954,18 +958,8 @@ class SajPVCurrentSensor(SajBaseSensor):
         if not super().available:
             return False
             
-        # Only consider available if the PV input has actual power
-        history_data = self._get_history_data()
-        power_key = f"pv{self._pv_input}power"
-        
-        if power_key in history_data:
-            try:
-                power_value = float(history_data[power_key])
-                return power_value > 0
-            except (ValueError, TypeError):
-                pass
-                
-        return False
+        # Always return available if the device is available
+        return True
 
 class SajGridPhasePowerSensor(SajBaseSensor):
     """Sensor for SAJ grid phase power."""
@@ -1003,7 +997,7 @@ class SajGridPhasePowerSensor(SajBaseSensor):
         if f"{self._phase}_phase_power" in processed_data:
             return processed_data[f"{self._phase}_phase_power"]
             
-        return None
+        return 0  # Return 0 instead of None when no data is available
         
     @property
     def available(self):
@@ -1011,10 +1005,8 @@ class SajGridPhasePowerSensor(SajBaseSensor):
         if not super().available:
             return False
             
-        history_data = self._get_history_data()
-        power_key = f"{self._phase}GridPowerWatt"
-        
-        return power_key in history_data and history_data[power_key] != "0"
+        # Always return available if the device is available
+        return True
 
 class SajGridPhaseVoltageSensor(SajBaseSensor):
     """Sensor for SAJ grid phase voltage."""
@@ -1047,7 +1039,12 @@ class SajGridPhaseVoltageSensor(SajBaseSensor):
             except (ValueError, TypeError):
                 pass
             
-        return None
+        # Try processed data
+        processed_data = self._get_processed_data()
+        if f"{self._phase}_phase_voltage" in processed_data:
+            return processed_data[f"{self._phase}_phase_voltage"]
+            
+        return 0  # Return 0 instead of None when no data is available
         
     @property
     def available(self):
@@ -1055,10 +1052,8 @@ class SajGridPhaseVoltageSensor(SajBaseSensor):
         if not super().available:
             return False
             
-        history_data = self._get_history_data()
-        voltage_key = f"{self._phase}GridVolt"
-        
-        return voltage_key in history_data and history_data[voltage_key] != "0"
+        # Always return available if the device is available
+        return True
 
 class SajGridPhaseCurrentSensor(SajBaseSensor):
     """Sensor for SAJ grid phase current."""
@@ -1091,7 +1086,12 @@ class SajGridPhaseCurrentSensor(SajBaseSensor):
             except (ValueError, TypeError):
                 pass
             
-        return None
+        # Try processed data
+        processed_data = self._get_processed_data()
+        if f"{self._phase}_phase_current" in processed_data:
+            return processed_data[f"{self._phase}_phase_current"]
+            
+        return 0  # Return 0 instead of None when no data is available
         
     @property
     def available(self):
@@ -1099,10 +1099,8 @@ class SajGridPhaseCurrentSensor(SajBaseSensor):
         if not super().available:
             return False
             
-        history_data = self._get_history_data()
-        current_key = f"{self._phase}GridCurr"
-        
-        return current_key in history_data and history_data[current_key] != "0"
+        # Always return available if the device is available
+        return True
 
 class SajGridPhaseFrequencySensor(SajBaseSensor):
     """Sensor for SAJ grid phase frequency."""
@@ -1135,7 +1133,12 @@ class SajGridPhaseFrequencySensor(SajBaseSensor):
             except (ValueError, TypeError):
                 pass
             
-        return None
+        # Try processed data
+        processed_data = self._get_processed_data()
+        if f"{self._phase}_phase_frequency" in processed_data:
+            return processed_data[f"{self._phase}_phase_frequency"]
+            
+        return 0  # Return 0 instead of None when no data is available
         
     @property
     def available(self):
@@ -1143,10 +1146,8 @@ class SajGridPhaseFrequencySensor(SajBaseSensor):
         if not super().available:
             return False
             
-        history_data = self._get_history_data()
-        freq_key = f"{self._phase}GridFreq"
-        
-        return freq_key in history_data and history_data[freq_key] != "0"
+        # Always return available if the device is available
+        return True
 
 class SajBatteryLevelSensor(SajBaseSensor):
     """Sensor for SAJ battery level."""
