@@ -791,6 +791,7 @@ class SajApiClient:
                 _LOGGER.debug("Load monitoring buyEnergy: %s", total_values.get("buyEnergy"))
                 _LOGGER.debug("Load monitoring sellEnergy: %s", total_values.get("sellEnergy"))
                 _LOGGER.debug("Load monitoring pvEnergy: %s", total_values.get("pvEnergy"))
+                _LOGGER.debug("Load monitoring loadEnergy: %s", total_values.get("loadEnergy"))
                 
                 if "pvEnergy" in total_values:
                     try:

@@ -105,6 +105,10 @@ async def async_setup_entry(
             SajHomeLoadPowerSensor(coordinator, device_sn, device_name),
         ])
         
+        # Add inverter-specific load energy sensor for solar devices
+        if device_type == DEVICE_TYPE_SOLAR:
+            entities.append(SajTodayInverterLoadEnergySensor(coordinator, device_sn, device_name))
+        
         # Add solar-specific entities
         if device_type == DEVICE_TYPE_SOLAR:
             # Always create PV1 and PV2 sensors for solar devices
@@ -1691,6 +1695,39 @@ class SajTotalGridImportSensor(SajBaseSensor):
            processed_data = self._get_processed_data()
            if "total_grid_import" in processed_data:
                return processed_data["total_grid_import"]
+       
+       return None
+
+class SajTodayInverterLoadEnergySensor(SajBaseSensor):
+   """Sensor for SAJ today's inverter load energy."""
+
+   def __init__(self, coordinator, device_sn, device_name):
+       """Initialize the sensor."""
+       super().__init__(
+           coordinator=coordinator,
+           device_sn=device_sn,
+           device_name=device_name,
+           name_suffix="Today's Home Consumption",
+           unique_id_suffix="today_inverter_load_energy",
+           icon="mdi:home-lightning-bolt",
+           device_class=SensorDeviceClass.ENERGY,
+           state_class=SensorStateClass.TOTAL_INCREASING,
+           unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+       )
+
+   @property
+   def native_value(self):
+       """Return the state of the sensor."""
+       device_data = self._get_device_data()
+       
+       # Get load monitoring data
+       if "load_monitoring" in device_data and device_data["load_monitoring"]:
+           total = device_data["load_monitoring"].get("total", {})
+           if "loadEnergy" in total:
+               try:
+                   return float(total["loadEnergy"])
+               except (ValueError, TypeError):
+                   pass
        
        return None
 
