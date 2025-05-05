@@ -375,29 +375,30 @@ class SajTodayEnergySensor(SajBaseSensor):
         device_type = device_data.get("device_type")
         processed_data = self._get_processed_data()
 
-        # For all device types, try processed data first
-        if "today_pv_energy" in processed_data:
-            return processed_data["today_pv_energy"]
-
-        # For solar devices, check if we have realtime data
-        if device_type == DEVICE_TYPE_SOLAR:
-            realtime_data = self._get_realtime_data()
-            if realtime_data and realtime_data.get("isOnline") == "1":
-                if "todayPvEnergy" in realtime_data:
-                    try:
-                        return float(realtime_data["todayPvEnergy"])
-                    except (ValueError, TypeError):
-                        pass
-
-        # Fall back to history data
-        history_data = self._get_history_data()
-        if "todayPvEnergy" in history_data:
-            try:
-                return float(history_data["todayPvEnergy"])
-            except (ValueError, TypeError):
-                pass
+        # For battery devices, use processed data
+        if device_type == DEVICE_TYPE_BATTERY:
+            if "today_pv_energy" in processed_data:
+                return processed_data["today_pv_energy"]
+                
+            # Fall back to history data for battery devices
+            history_data = self._get_history_data()
+            if "todayPvEnergy" in history_data:
+                try:
+                    return float(history_data["todayPvEnergy"])
+                except (ValueError, TypeError):
+                    pass
+                    
+            # Last resort for battery: plant statistics
+            plant_stats = self._get_plant_stats()
+            if "todayPvEnergy" in plant_stats:
+                try:
+                    return float(plant_stats["todayPvEnergy"])
+                except (ValueError, TypeError):
+                    pass
             
-        # Check load monitoring data for solar devices
+            return None
+
+        # For solar devices, use load monitoring data exclusively
         if device_type == DEVICE_TYPE_SOLAR and "load_monitoring" in device_data:
             load_monitoring = device_data["load_monitoring"]
             if load_monitoring and "total" in load_monitoring:
@@ -409,16 +410,8 @@ class SajTodayEnergySensor(SajBaseSensor):
                     except (ValueError, TypeError):
                         pass
             
-        # Last resort: plant statistics
-        plant_stats = self._get_plant_stats()
-        if "todayPvEnergy" in plant_stats:
-            try:
-                return float(plant_stats["todayPvEnergy"])
-            except (ValueError, TypeError):
-                pass
-            
-        # If all else fails, return 0 for solar devices at night
-        if device_type == DEVICE_TYPE_SOLAR:
+            # If load monitoring data is not available or doesn't have the value,
+            # return 0 instead of falling back to other data sources
             return 0
             
         return None
@@ -735,8 +728,26 @@ class SajTodayGridExportSensor(SajBaseSensor):
             processed_data = self._get_processed_data()
             if "today_grid_export_energy" in processed_data:
                 return processed_data["today_grid_export_energy"]
+                
+            # Fall back to history data for battery devices
+            history_data = self._get_history_data()
+            if "todaySellEnergy" in history_data:
+                try:
+                    return float(history_data["todaySellEnergy"])
+                except (ValueError, TypeError):
+                    pass
+                
+            # Fall back to plant statistics for battery devices
+            plant_stats = self._get_plant_stats()
+            if "todaySellEnergy" in plant_stats:
+                try:
+                    return float(plant_stats["todaySellEnergy"])
+                except (ValueError, TypeError):
+                    pass
+                
+            return None
         
-        # For solar devices, check for load monitoring data first
+        # For solar devices, use load monitoring data exclusively
         if device_type == DEVICE_TYPE_SOLAR and "load_monitoring" in device_data:
             load_monitoring = device_data["load_monitoring"]
             if load_monitoring and "total" in load_monitoring:
@@ -746,22 +757,10 @@ class SajTodayGridExportSensor(SajBaseSensor):
                         return float(total["sellEnergy"])
                     except (ValueError, TypeError):
                         pass
-        
-        # Fall back to history data
-        history_data = self._get_history_data()
-        if "todaySellEnergy" in history_data:
-            try:
-                return float(history_data["todaySellEnergy"])
-            except (ValueError, TypeError):
-                pass
             
-        # Fall back to plant statistics
-        plant_stats = self._get_plant_stats()
-        if "todaySellEnergy" in plant_stats:
-            try:
-                return float(plant_stats["todaySellEnergy"])
-            except (ValueError, TypeError):
-                pass
+            # If load monitoring data is not available or doesn't have the value,
+            # return 0 instead of falling back to other data sources
+            return 0
             
         return None
 
@@ -1646,7 +1645,7 @@ class SajTodayGridImportEnergySensor(SajBaseSensor):
            processed_data = self._get_processed_data()
            return processed_data.get("today_grid_import_energy")
        
-       # For solar devices, check for load monitoring data first
+       # For solar devices, use load monitoring data exclusively
        if device_type == DEVICE_TYPE_SOLAR and "load_monitoring" in device_data:
            load_monitoring = device_data["load_monitoring"]
            if load_monitoring and "total" in load_monitoring:
@@ -1656,14 +1655,10 @@ class SajTodayGridImportEnergySensor(SajBaseSensor):
                        return float(total["buyEnergy"])
                    except (ValueError, TypeError):
                        pass
-       
-       # Fall back to history data if available
-       history_data = self._get_history_data()
-       if "todayFeedInEnergy" in history_data:
-           try:
-               return float(history_data["todayFeedInEnergy"])
-           except (ValueError, TypeError):
-               pass
+           
+           # If load monitoring data is not available or doesn't have the value,
+           # return 0 instead of falling back to other data sources
+           return 0
            
        return None
 
@@ -1729,7 +1724,9 @@ class SajTodayInverterLoadEnergySensor(SajBaseSensor):
                except (ValueError, TypeError):
                    pass
        
-       return None
+       # If load monitoring data is not available or doesn't have the value,
+       # return 0 instead of returning None
+       return 0
 
 class SajTotalLoadEnergySensor(SajBaseSensor):
    """Sensor for SAJ total load energy."""
