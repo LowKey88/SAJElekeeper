@@ -241,13 +241,15 @@ class SajApiClient:
             return None
 
         try:
-            # Use current time for the request
-            end_time = datetime.now()
-            # Request data for the last hour
-            start_time = end_time - timedelta(hours=1)
+            # Get the current time
+            now = datetime.now()
             
-            start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
-            end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+            # Start time is midnight of the current day
+            today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # Use current time as end time to get all data for today so far
+            start_time_str = today_midnight.strftime("%Y-%m-%d %H:%M:%S")
+            end_time_str = now.strftime("%Y-%m-%d %H:%M:%S")
             
             url = f"{BASE_URL}{LOAD_MONITORING_URL}"
             params = {
