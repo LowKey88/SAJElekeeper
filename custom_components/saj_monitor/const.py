@@ -23,6 +23,9 @@ POWER_ICON = "mdi:flash"
 ENERGY_ICON = "mdi:lightning-bolt"
 GRID_ICON = "mdi:transmission-tower"
 TEMPERATURE_ICON = "mdi:thermometer"
+MONEY_ICON = "mdi:currency-usd"
+CO2_ICON = "mdi:molecule-co2"
+EFFICIENCY_ICON = "mdi:chart-bell-curve"
 
 # API URLs
 BASE_URL = "https://intl-developer.saj-electric.com"
@@ -31,6 +34,7 @@ DEVICE_INFO_URL = "/prod-api/open/api/device/batInfo"
 PLANT_STATS_URL = "/prod-api/open/api/plant/getPlantStatisticsData"
 HISTORY_DATA_URL = "/prod-api/open/api/device/historyDataCommon"
 LOAD_MONITORING_URL = "/prod-api/open/api/device/secData"
+REALTIME_DATA_URL = "/prod-api/open/api/device/realtimeDataCommon"
 
 # Error messages
 ERROR_AUTH = "Authentication failed. Please check your credentials."
