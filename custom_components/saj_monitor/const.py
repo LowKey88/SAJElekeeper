@@ -43,6 +43,4 @@ ERROR_AUTH = "Authentication failed. Please check your credentials."
 ERROR_COMM = "Communication error. Please check your internet connection."
 ERROR_UNKNOWN = "Unknown error occurred."
 
-# Device states
-STATE_ONLINE = "online"
-STATE_OFFLINE = "offline"
+# No longer needed - we'll use Home Assistant's standard states

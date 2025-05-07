@@ -21,8 +21,6 @@ from .const import (
     EFFICIENCY_ICON,
     ONLINE_ICON,
     OFFLINE_ICON,
-    STATE_ONLINE,
-    STATE_OFFLINE,
 )
 
 # Then import Home Assistant classes
@@ -112,9 +110,6 @@ async def async_setup_entry(
         # Add inverter-specific load energy sensor for solar devices
         if device_type == DEVICE_TYPE_SOLAR:
             entities.append(SajTodayInverterLoadEnergySensor(coordinator, device_sn, device_name))
-            
-            # Add online status sensor for solar inverters
-            entities.append(SajDeviceOnlineStatusSensor(coordinator, device_sn, device_name))
         
         # Add solar-specific entities
         if device_type == DEVICE_TYPE_SOLAR:
@@ -1735,111 +1730,7 @@ class SajTodayInverterLoadEnergySensor(SajBaseSensor):
        # return 0 instead of returning None
        return 0
 
-class SajDeviceOnlineStatusSensor(SajBaseSensor):
-    """Sensor for SAJ solar inverter online status."""
-
-    def __init__(self, coordinator, device_sn, device_name):
-        """Initialize the sensor."""
-        super().__init__(
-            coordinator=coordinator,
-            device_sn=device_sn,
-            device_name=device_name,
-            name_suffix="Online Status",
-            unique_id_suffix="online_status",
-            icon=ONLINE_ICON,
-            entity_category=EntityCategory.DIAGNOSTIC,
-        )
-        
-    def _get_realtime_data(self):
-        """Get realtime data from coordinator."""
-        device_data = self._get_device_data()
-        if not device_data:
-            return {}
-        realtime_data = device_data.get("realtime_data")
-        return realtime_data if isinstance(realtime_data, dict) else {}
-    
-    def _is_nighttime(self):
-        """Determine if it's likely nighttime based on available data."""
-        device_data = self._get_device_data()
-        
-        # Check if we have any history or realtime data
-        has_history = bool(device_data.get("history_data"))
-        has_realtime = bool(self._get_realtime_data())
-        
-        # Check if we have load monitoring data (which works 24/7)
-        has_load_monitoring = bool(device_data.get("load_monitoring"))
-        
-        # Check processed data for PV power
-        processed_data = self._get_processed_data()
-        pv_power = processed_data.get("total_pv_power_calculated", 0)
-        
-        # It's likely nighttime if:
-        # 1. We have load monitoring data (API is working)
-        # 2. But no history data or very low/zero PV power
-        # 3. And realtime data doesn't show online status
-        return (has_load_monitoring and 
-                (not has_history or pv_power < 5) and 
-                not (has_realtime and self._get_realtime_data().get("isOnline") == "1"))
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        # Get realtime data which contains the isOnline field
-        realtime_data = self._get_realtime_data()
-        
-        # If we have realtime data and it shows online, device is online
-        if realtime_data and realtime_data.get("isOnline") == "1":
-            return STATE_ONLINE
-        
-        # Check if it's likely nighttime
-        if self._is_nighttime():
-            # During nighttime, show as offline but add a note in the attributes
-            # This is expected behavior for solar inverters
-            return STATE_OFFLINE
-        
-        # Otherwise, it's genuinely offline
-        return STATE_OFFLINE
-    
-    @property
-    def icon(self):
-        """Return the icon based on the device's online status."""
-        if self.native_value == STATE_ONLINE:
-            return ONLINE_ICON
-        return OFFLINE_ICON
-        
-    @property
-    def extra_state_attributes(self):
-        """Return additional attributes about the device's status."""
-        realtime_data = self._get_realtime_data()
-        
-        # Return raw isOnline value and the last time data was fetched
-        attributes = {}
-        
-        # Add raw status info from realtime data if available
-        if realtime_data:
-            attributes["raw_online_status"] = realtime_data.get("isOnline", "unknown")
-            
-            # Add last update time if available
-            if "recordTime" in realtime_data:
-                attributes["last_update_time"] = realtime_data["recordTime"]
-        
-        # Add nighttime indicator if applicable
-        if self._is_nighttime():
-            attributes["is_nighttime"] = True
-            attributes["status_note"] = "Solar inverter is in sleep mode (normal during nighttime)"
-        
-        # Add data availability info to help with debugging
-        device_data = self._get_device_data()
-        attributes["has_realtime_data"] = bool(realtime_data)
-        attributes["has_history_data"] = bool(device_data.get("history_data"))
-        attributes["has_load_monitoring"] = bool(device_data.get("load_monitoring"))
-        
-        # Include PV power if available
-        processed_data = self._get_processed_data()
-        if "total_pv_power_calculated" in processed_data:
-            attributes["pv_power"] = processed_data["total_pv_power_calculated"]
-        
-        return attributes
+# Online status sensor moved to binary_sensor.py
 
 
 class SajTotalLoadEnergySensor(SajBaseSensor):
