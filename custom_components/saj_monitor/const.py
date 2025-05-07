@@ -26,6 +26,8 @@ TEMPERATURE_ICON = "mdi:thermometer"
 MONEY_ICON = "mdi:currency-usd"
 CO2_ICON = "mdi:molecule-co2"
 EFFICIENCY_ICON = "mdi:chart-bell-curve"
+ONLINE_ICON = "mdi:lan-connect"
+OFFLINE_ICON = "mdi:lan-disconnect"
 
 # API URLs
 BASE_URL = "https://intl-developer.saj-electric.com"
