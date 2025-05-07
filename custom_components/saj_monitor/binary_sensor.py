@@ -193,15 +193,39 @@ class SajDeviceOnlineStatusBinarySensor(SajBaseBinarySensor):
         """Return true if the device is online."""
         # Get realtime data which contains the isOnline field
         realtime_data = self._get_realtime_data()
+        device_data = self._get_device_data()
+        device_type = device_data.get("device_type")
+        
+        # Log key information for debugging
+        _LOGGER.debug(
+            "Connection status for device %s (type: %s): has_realtime_data=%s, isOnline=%s", 
+            self._device_sn, 
+            device_type,
+            bool(realtime_data),
+            realtime_data.get("isOnline") if realtime_data else "N/A"
+        )
         
         # If we have realtime data and it shows online, device is online
         if realtime_data and realtime_data.get("isOnline") == "1":
             return True
+            
+        # Special handling for battery systems - they should generally be online
+        # Battery devices are usually always online (even at night), so we need different logic
+        if device_type == DEVICE_TYPE_BATTERY:
+            # For battery systems, check if we have any realtime data at all
+            # Even if isOnline is not "1", having any realtime data suggests it's connected
+            if realtime_data:
+                # Additional check for battery devices - if we have processed data with battery level,
+                # consider it online even if isOnline flag is not set to "1"
+                processed_data = self._get_processed_data()
+                if processed_data and "battery_level" in processed_data:
+                    _LOGGER.debug("Battery device has battery_level data, considering it online")
+                    return True
         
         # For solar devices, if it's nighttime, we treat the status differently
-        device_data = self._get_device_data()
-        if device_data.get("device_type") == DEVICE_TYPE_SOLAR and self._is_nighttime():
+        if device_type == DEVICE_TYPE_SOLAR and self._is_nighttime():
             # During nighttime, still return False (disconnected) but we'll add context in attributes
+            _LOGGER.debug("Solar device in nighttime mode, showing as offline with context")
             return False
         
         # Otherwise, genuinely disconnected
@@ -228,11 +252,20 @@ class SajDeviceOnlineStatusBinarySensor(SajBaseBinarySensor):
             if "recordTime" in realtime_data:
                 attributes["last_update_time"] = realtime_data["recordTime"]
         
-        # Add nighttime indicator if applicable
+        # Add specific status notes based on device type
         device_data = self._get_device_data()
-        if device_data.get("device_type") == DEVICE_TYPE_SOLAR and self._is_nighttime():
+        device_type = device_data.get("device_type")
+        
+        if device_type == DEVICE_TYPE_SOLAR and self._is_nighttime():
+            # For solar devices at night
             attributes["is_nighttime"] = True
             attributes["status_note"] = "Solar inverter is in sleep mode (normal during nighttime)"
+        elif device_type == DEVICE_TYPE_BATTERY and not self.is_on:
+            # For offline battery systems
+            attributes["status_note"] = "Battery system appears to be disconnected"
+            # Add some diagnostic info for battery systems
+            if realtime_data:
+                attributes["battery_data_available"] = "Has some data but not showing as connected"
         
         # Add data availability info to help with debugging
         attributes["has_realtime_data"] = bool(realtime_data)
