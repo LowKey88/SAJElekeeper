@@ -21,6 +21,8 @@ from .const import (
     EFFICIENCY_ICON,
     ONLINE_ICON,
     OFFLINE_ICON,
+    STATE_ONLINE,
+    STATE_OFFLINE,
 )
 
 # Then import Home Assistant classes
@@ -44,8 +46,6 @@ from homeassistant.const import (
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfFrequency,
-    STATE_ONLINE,
-    STATE_OFFLINE,
 )
 
 _LOGGER = logging.getLogger(__name__)

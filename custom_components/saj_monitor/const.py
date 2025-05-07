@@ -42,3 +42,7 @@ REALTIME_DATA_URL = "/prod-api/open/api/device/realtimeDataCommon"
 ERROR_AUTH = "Authentication failed. Please check your credentials."
 ERROR_COMM = "Communication error. Please check your internet connection."
 ERROR_UNKNOWN = "Unknown error occurred."
+
+# Device states
+STATE_ONLINE = "online"
+STATE_OFFLINE = "offline"
