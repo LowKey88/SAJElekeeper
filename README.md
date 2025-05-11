@@ -24,23 +24,35 @@ A Home Assistant custom component for monitoring SAJ solar inverters and battery
 
 ## Prerequisites
 
-Before installing this integration, you need to obtain SAJ Developer API credentials:
+Before installing this integration, you need to obtain SAJ Developer API credentials and device information:
+
+### 1. Getting API Credentials
 
 1. **Register as a Developer on the SAJ Elekeeper Platform:**
-   - Log in to the Elekeeper web portal
+   - Log in to the [Elekeeper web portal](https://intl-developer.saj-electric.com)
    - Find the developers function on the top of the portal
    - Choose "Autonomous Account"
    - Complete the developer registration form
    - Wait for SAJ to process your application
 
 2. **Obtain Your API Credentials:**
-   - After approval, you'll receive:
+   - After approval, navigate to the developer console
+   - Go to "App Configuration" in the settings menu
+   - You'll receive:
      - App ID
      - App Secret
-   
+   - Keep these credentials handy for the integration setup
+
 3. **Authorize Resources:**
    - Set up which plants/devices you want to monitor
    - Follow the authorization process in the developer section
+
+### 2. Getting Device Information
+
+You'll need the following information about your devices:
+   - **Device Serial Number (SN)**: This can be found in the Elekeeper console under "View Authorized Devices"
+   - **Plant ID**: This is associated with your plant in the Elekeeper platform
+   - **Device Type**: Select whether the device is a solar inverter or battery system
 
 For detailed instructions on this process, refer to the SAJ Elekeeper API Documentation at the [SAJ International Developer Portal](https://intl-developer.saj-electric.com). The portal provides:
 
@@ -72,10 +84,23 @@ If you are a plant owner and working with a third-party developer, you'll need t
 
 ## Configuration
 
+After installation, you'll need to configure the integration:
+
 1. Go to Home Assistant > Settings > Devices & Services
 2. Click "Add Integration" and search for "SAJ Monitor"
-3. Follow the configuration steps to add your SAJ Developer API credentials (App ID, App Secret) obtained from the Elekeeper developer portal
-4. Add your SAJ devices by providing a name, serial number (SN), plant ID, and device type
+3. You'll be prompted to enter your API credentials:
+   - **App ID**: Enter the App ID obtained from the Elekeeper developer portal
+   - **App Secret**: Enter the App Secret obtained from the Elekeeper developer portal
+4. Click "Submit" to validate your credentials
+5. Next, you'll be prompted to add your device:
+   - **Name**: Enter a friendly name for your device (e.g., "Rooftop Solar")
+   - **SN**: Enter the device Serial Number from the Elekeeper console
+   - **Plant ID**: Enter the Plant ID from the Elekeeper console
+   - **Type**: Select either "solar" or "battery" depending on your device type
+6. Click "Submit" to add the device
+7. You can add additional devices by repeating the process
+
+After adding your devices, the integration will create entities for each device, and you can start monitoring your SAJ solar inverters and battery systems in Home Assistant.
 
 ## Available Sensors
 
