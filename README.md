@@ -22,6 +22,35 @@ A Home Assistant custom component for monitoring SAJ solar inverters and battery
 ![Sensors](https://raw.githubusercontent.com/lowkey88/SAJMonitor/main/images/sensors.png)
 -->
 
+## Prerequisites
+
+Before installing this integration, you need to obtain SAJ Developer API credentials:
+
+1. **Register as a Developer on the SAJ Elekeeper Platform:**
+   - Log in to the Elekeeper web portal
+   - Find the developers function on the top of the portal
+   - Choose "Autonomous Account"
+   - Complete the developer registration form
+   - Wait for SAJ to process your application
+
+2. **Obtain Your API Credentials:**
+   - After approval, you'll receive:
+     - App ID
+     - App Secret
+   
+3. **Authorize Resources:**
+   - Set up which plants/devices you want to monitor
+   - Follow the authorization process in the developer section
+
+For detailed instructions on this process, refer to the SAJ Elekeeper API Documentation at the [SAJ International Developer Portal](https://intl-developer.saj-electric.com). The portal provides:
+
+- API documentation
+- Developer guides 
+- Sample code
+- File center with additional resources at https://intl-developer.saj-electric.com/fileCenter/index
+
+If you are a plant owner and working with a third-party developer, you'll need to authorize their developer ID to access your plant data.
+
 ## Installation
 
 ### HACS (Recommended)
@@ -45,7 +74,7 @@ A Home Assistant custom component for monitoring SAJ solar inverters and battery
 
 1. Go to Home Assistant > Settings > Devices & Services
 2. Click "Add Integration" and search for "SAJ Monitor"
-3. Follow the configuration steps to add your SAJ Developer API credentials (App ID, App Secret)
+3. Follow the configuration steps to add your SAJ Developer API credentials (App ID, App Secret) obtained from the Elekeeper developer portal
 4. Add your SAJ devices by providing a name, serial number (SN), plant ID, and device type
 
 ## Available Sensors
@@ -89,7 +118,15 @@ If you encounter any issues:
 1. Check the Home Assistant logs for error messages
 2. Make sure your SAJ Developer API credentials are correct
 3. Verify that your device serial numbers and plant IDs are correct
-4. Restart Home Assistant after making changes to the integration
+4. Confirm that you've completed the authorization process on the SAJ Elekeeper platform
+5. Ensure your developer account has permissions to access the devices you're trying to monitor
+6. Restart Home Assistant after making changes to the integration
+
+If you receive authentication errors, you may need to:
+- Check if your developer account is still active
+- Re-authorize your resources in the Elekeeper portal
+- Verify you're using the international node: https://intl-developer.saj-electric.com (for international users except Europe)
+- European users should use: https://developer.electric.com
 
 ## Reporting Issues
 
