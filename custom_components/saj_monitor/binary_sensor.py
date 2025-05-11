@@ -4,7 +4,6 @@ from typing import Dict, Any, Optional
 
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
-    BinarySensorDeviceClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -47,17 +46,18 @@ async def async_setup_entry(
             _LOGGER.warning("No data for device %s (%s), skipping", device_name, device_sn)
             continue
             
-        # Add online status binary sensor (for both solar and battery devices)
-        # Focus on solar devices first but support both
-        entities.append(SajDeviceOnlineStatusBinarySensor(coordinator, device_sn, device_name))
+        # Add status binary sensor
+        entities.append(SajDeviceStatusBinarySensor(coordinator, device_sn, device_name))
     
+    # Simple info log
+    _LOGGER.info("Set up %d SAJ inverter status sensors", len(entities))
     async_add_entities(entities)
 
 class SajBaseBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """Base class for SAJ binary sensors."""
 
     def __init__(self, coordinator, device_sn, device_name, name_suffix, unique_id_suffix,
-                icon=None, device_class=None, entity_category=None):
+                icon=None, entity_category=None):
         """Initialize the binary sensor."""
         super().__init__(coordinator)
         
@@ -66,8 +66,10 @@ class SajBaseBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_name = f"{device_name} {name_suffix}"
         self._attr_unique_id = f"{device_sn}_{unique_id_suffix}"
         self._attr_icon = icon
-        self._attr_device_class = device_class
+        self._attr_device_class = None
         self._attr_entity_category = entity_category
+        # Cache for the current state to avoid recalculating repeatedly
+        self._current_state = None
         
         # Get device data safely
         device_data = self.coordinator.data.get(device_sn, {})
@@ -112,6 +114,9 @@ class SajBaseBinarySensor(CoordinatorEntity, BinarySensorEntity):
                 model=f"SAJ {device_data.get('device_type', 'Device')}",
                 hw_version=module_sn,
             )
+        
+        # Simple debug logging - only on entity creation
+        _LOGGER.debug("Initialized status sensor for %s", self._device_name)
 
     @property
     def available(self) -> bool:
@@ -149,19 +154,34 @@ class SajBaseBinarySensor(CoordinatorEntity, BinarySensorEntity):
         processed_data = device_data.get("processed_data") or {}
         return processed_data if isinstance(processed_data, dict) else {}
 
-class SajDeviceOnlineStatusBinarySensor(SajBaseBinarySensor):
-    """Binary sensor for SAJ solar inverter online status."""
+class SajDeviceStatusBinarySensor(SajBaseBinarySensor):
+    """Binary sensor for SAJ device status."""
 
     def __init__(self, coordinator, device_sn, device_name):
         """Initialize the binary sensor."""
+        # Determine the right name suffix and unique_id_suffix based on device type
+        device_data = coordinator.data.get(device_sn, {})
+        device_type = device_data.get("device_type", "")
+        
+        if device_type == DEVICE_TYPE_BATTERY:
+            name_suffix = "Battery Inverter Status"
+            unique_id_suffix = "battery_inverter_status"
+        elif device_type == DEVICE_TYPE_SOLAR:
+            name_suffix = "Solar Inverter Status"
+            unique_id_suffix = "solar_inverter_status"
+        else:
+            # Generic fallback
+            name_suffix = "Inverter Status"
+            unique_id_suffix = "inverter_status"
+        
+        # Use the new unique ID but no device class
         super().__init__(
             coordinator=coordinator,
             device_sn=device_sn,
             device_name=device_name,
-            name_suffix="Connection Status",
-            unique_id_suffix="connection_status",
+            name_suffix=name_suffix,
+            unique_id_suffix=unique_id_suffix,
             icon=ONLINE_ICON,
-            device_class=BinarySensorDeviceClass.CONNECTIVITY,
             entity_category=EntityCategory.DIAGNOSTIC,
         )
     
@@ -187,49 +207,59 @@ class SajDeviceOnlineStatusBinarySensor(SajBaseBinarySensor):
         return (has_load_monitoring and 
                 (not has_history or pv_power < 5) and 
                 not (has_realtime and self._get_realtime_data().get("isOnline") == "1"))
-
-    @property
-    def is_on(self) -> bool:
-        """Return true if the device is online."""
-        # Get realtime data which contains the isOnline field
+                
+    def _determine_state(self):
+        """Determine the current state without logging."""
         realtime_data = self._get_realtime_data()
         device_data = self._get_device_data()
         device_type = device_data.get("device_type")
         
-        # Log key information for debugging
-        _LOGGER.debug(
-            "Connection status for device %s (type: %s): has_realtime_data=%s, isOnline=%s", 
-            self._device_sn, 
-            device_type,
-            bool(realtime_data),
-            realtime_data.get("isOnline") if realtime_data else "N/A"
-        )
-        
-        # If we have realtime data and it shows online, device is online
+        # Check if online based on realtime data
         if realtime_data and realtime_data.get("isOnline") == "1":
             return True
-            
-        # Special handling for battery systems - they should generally be online
-        # Battery devices are usually always online (even at night), so we need different logic
-        if device_type == DEVICE_TYPE_BATTERY:
-            # For battery systems, check if we have any realtime data at all
-            # Even if isOnline is not "1", having any realtime data suggests it's connected
-            if realtime_data:
-                # Additional check for battery devices - if we have processed data with battery level,
-                # consider it online even if isOnline flag is not set to "1"
-                processed_data = self._get_processed_data()
-                if processed_data and "battery_level" in processed_data:
-                    _LOGGER.debug("Battery device has battery_level data, considering it online")
-                    return True
         
-        # For solar devices, if it's nighttime, we treat the status differently
+        # Check if it's a solar device at night
         if device_type == DEVICE_TYPE_SOLAR and self._is_nighttime():
-            # During nighttime, still return False (disconnected) but we'll add context in attributes
-            _LOGGER.debug("Solar device in nighttime mode, showing as offline with context")
             return False
         
-        # Otherwise, genuinely disconnected
+        # Otherwise, device is offline
         return False
+    
+    def _update_if_needed(self):
+        """Update state if coordinator has been updated."""
+        if self.coordinator.last_update_success:
+            new_state = self._determine_state()
+            
+            # Only log if state has changed or this is the first check
+            if self._current_state is None or self._current_state != new_state:
+                device_data = self._get_device_data()
+                device_type = device_data.get("device_type")
+                
+                if device_type == DEVICE_TYPE_SOLAR and self._is_nighttime():
+                    _LOGGER.debug("%s status: Offline (nighttime)", self._device_name)
+                else:
+                    _LOGGER.debug("%s status: %s", self._device_name, "Online" if new_state else "Offline")
+                
+                # Update our cached state
+                self._current_state = new_state
+                
+            return new_state
+        return self._current_state if self._current_state is not None else False
+
+    @property
+    def is_on(self) -> bool:
+        """Return true if the device is online."""
+        return self._update_if_needed()
+    
+    @property
+    def state(self) -> str:
+        """Return the state of the binary sensor.
+        
+        This method overrides the default to return Online/Offline instead of on/off.
+        """
+        if self.is_on:
+            return "Online"
+        return "Offline"
     
     @property
     def icon(self):
@@ -237,44 +267,29 @@ class SajDeviceOnlineStatusBinarySensor(SajBaseBinarySensor):
         return ONLINE_ICON if self.is_on else OFFLINE_ICON
         
     @property
+    def device_state_attributes(self):
+        """Return the state attributes of the entity (for Home Assistant < 2022.07)."""
+        return self.extra_state_attributes
+        
+    @property
     def extra_state_attributes(self):
         """Return additional attributes about the device's status."""
         realtime_data = self._get_realtime_data()
-        
-        # Return raw isOnline value and the last time data was fetched
-        attributes = {}
-        
-        # Add raw status info from realtime data if available
-        if realtime_data:
-            attributes["raw_online_status"] = realtime_data.get("isOnline", "unknown")
-            
-            # Add last update time if available
-            if "recordTime" in realtime_data:
-                attributes["last_update_time"] = realtime_data["recordTime"]
-        
-        # Add specific status notes based on device type
         device_data = self._get_device_data()
         device_type = device_data.get("device_type")
         
+        attributes = {}
+        
+        # Add simplified status
+        attributes["status"] = "Online" if self.is_on else "Offline"
+        
+        # For solar devices at night, add minimal context
         if device_type == DEVICE_TYPE_SOLAR and self._is_nighttime():
-            # For solar devices at night
             attributes["is_nighttime"] = True
-            attributes["status_note"] = "Solar inverter is in sleep mode (normal during nighttime)"
-        elif device_type == DEVICE_TYPE_BATTERY and not self.is_on:
-            # For offline battery systems
-            attributes["status_note"] = "Battery system appears to be disconnected"
-            # Add some diagnostic info for battery systems
-            if realtime_data:
-                attributes["battery_data_available"] = "Has some data but not showing as connected"
+            attributes["note"] = "Normal during nighttime"
         
-        # Add data availability info to help with debugging
-        attributes["has_realtime_data"] = bool(realtime_data)
-        attributes["has_history_data"] = bool(device_data.get("history_data"))
-        attributes["has_load_monitoring"] = bool(device_data.get("load_monitoring"))
-        
-        # Include PV power if available
-        processed_data = self._get_processed_data()
-        if "total_pv_power_calculated" in processed_data:
-            attributes["pv_power"] = processed_data["total_pv_power_calculated"]
-        
+        # Add last update time if available
+        if realtime_data and "recordTime" in realtime_data:
+            attributes["last_update"] = realtime_data["recordTime"]
+            
         return attributes

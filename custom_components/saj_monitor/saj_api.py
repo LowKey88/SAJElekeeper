@@ -326,11 +326,23 @@ class SajApiClient:
         realtime_data = None
         
         if device_type == DEVICE_TYPE_BATTERY:
-            # Battery devices use realtime data exclusively
+            # Battery devices are expected to be online 24/7
+            # Try to get realtime data first
             realtime_data = await self.get_realtime_data(device_sn)
+            
+            # But even if realtime data fails, don't give up - battery devices should
+            # be considered online even if the realtime API endpoint is unavailable
             if not realtime_data:
-                _LOGGER.error("Failed to get realtime data for battery device %s", device_sn)
-                return None
+                _LOGGER.warning("Failed to get realtime data for battery device %s - will attempt to proceed anyway", device_sn)
+                # Try to get history data as a fallback
+                history_data = await self.get_history_data(device_sn, plant_id)
+                
+                # If we have device_info and plant_stats, we can still provide useful data
+                if device_info and plant_stats:
+                    _LOGGER.info("Battery device %s has device_info and plant_stats - continuing without realtime data", device_sn)
+                else:
+                    _LOGGER.error("No usable data available for battery device %s", device_sn)
+                    return None
         elif device_type == DEVICE_TYPE_SOLAR:
             # Solar devices - try to get both realtime and history data
             # But don't fail if they're unavailable (nighttime operation)
@@ -394,6 +406,7 @@ class SajApiClient:
             "device_info": device_info,
             "plant_stats": plant_stats,
             "history_data": history_data,
+            "realtime_data": realtime_data,
             "load_monitoring": load_monitoring,
             "device_type": device_type,
             "processed_data": processed_data,

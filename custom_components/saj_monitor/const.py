@@ -1,6 +1,6 @@
 """Constants for the SAJ Solar & Battery Monitor integration."""
 
-DOMAIN = "saj_monitor"
+DOMAIN = "saj"
 CONF_APP_ID = "app_id"
 CONF_APP_SECRET = "app_secret"
 
@@ -42,5 +42,3 @@ REALTIME_DATA_URL = "/prod-api/open/api/device/realtimeDataCommon"
 ERROR_AUTH = "Authentication failed. Please check your credentials."
 ERROR_COMM = "Communication error. Please check your internet connection."
 ERROR_UNKNOWN = "Unknown error occurred."
-
-# No longer needed - we'll use Home Assistant's standard states

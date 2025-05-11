@@ -1,11 +1,11 @@
 {
-  "domain": "saj_monitor",
+  "domain": "saj",
   "name": "SAJ Solar & Battery Monitor",
-  "documentation": "https://github.com/LowKey88/sajmonitor",
+  "documentation": "https://github.com/LowKey88/SAJMonitor",
   "dependencies": [],
   "codeowners": ["@LowKey88"],
   "requirements": [],
   "config_flow": true,
   "iot_class": "cloud_polling",
-  "version": "0.1.1"
+  "version": "0.1.2"
 }
