@@ -1,8 +1,8 @@
 {
-  "name": "SAJ Monitor",
+  "name": "SAJ Elekeeper",
   "render_readme": true,
-  "domain": "saj",
-  "documentation": "https://github.com/lowkey88/SAJMonitor",
-  "issue_tracker": "https://github.com/lowkey88/SAJMonitor/issues",
+  "domain": "saj_elekeeper",
+  "documentation": "https://github.com/lowkey88/SAJElekeeper",
+  "issue_tracker": "https://github.com/lowkey88/SAJElekeeper/issues",
   "homeassistant": "2025.5.0"
 }

@@ -1,8 +1,8 @@
-# SAJ Monitor - Home Assistant Integration
+# Home Assistant SAJ Elekeeper Custom Integration
 
-A Home Assistant custom component for monitoring SAJ solar inverters and battery systems. This integration fetches data from the SAJ cloud API and presents it as sensors within Home Assistant.
+A Home Assistant custom component for monitoring SAJ solar inverters and battery systems through the SAJ Elekeeper platform. This integration fetches data from the SAJ cloud API and presents it as sensors within Home Assistant.
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=lowkey88&repository=SAJMonitor&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=lowkey88&repository=SAJElekeeper&category=integration)
 
 ## Features
 
@@ -18,8 +18,8 @@ A Home Assistant custom component for monitoring SAJ solar inverters and battery
 <!-- 
 ## Screenshots
 
-![Integration](https://raw.githubusercontent.com/lowkey88/SAJMonitor/main/images/integration.png)
-![Sensors](https://raw.githubusercontent.com/lowkey88/SAJMonitor/main/images/sensors.png)
+![Integration](https://raw.githubusercontent.com/lowkey88/SAJElekeeper/main/images/integration.png)
+![Sensors](https://raw.githubusercontent.com/lowkey88/SAJElekeeper/main/images/sensors.png)
 -->
 
 ## Prerequisites
@@ -70,16 +70,16 @@ If you are a plant owner and working with a third-party developer, you'll need t
 1. Make sure [HACS](https://hacs.xyz/) is installed in your Home Assistant instance.
 2. Click the HACS install button above or add this repository as a custom repository in HACS:
    - Go to HACS > Integrations > ⋮ > Custom repositories
-   - Add `https://github.com/lowkey88/SAJMonitor` as a repository
+   - Add `https://github.com/lowkey88/SAJElekeeper` as a repository
    - Select "Integration" as the category
-3. Click "Download" on the SAJ Monitor integration
+3. Click "Download" on the SAJ Elekeeper integration
 4. Restart Home Assistant
 
 ### Manual Installation
 
 1. Download the latest release from this repository
 2. Create a `custom_components` directory in your Home Assistant configuration directory if it doesn't already exist
-3. Extract the `saj_monitor` directory from the release into the `custom_components` directory
+3. Extract the `saj_elekeeper` directory from the release into the `custom_components` directory
 4. Restart Home Assistant
 
 ## Configuration
@@ -87,7 +87,7 @@ If you are a plant owner and working with a third-party developer, you'll need t
 After installation, you'll need to configure the integration:
 
 1. Go to Home Assistant > Settings > Devices & Services
-2. Click "Add Integration" and search for "SAJ Monitor"
+2. Click "Add Integration" and search for "SAJ Elekeeper"
 3. You'll be prompted to enter your API credentials:
    - **App ID**: Enter the App ID obtained from the Elekeeper developer portal
    - **App Secret**: Enter the App Secret obtained from the Elekeeper developer portal

@@ -1,4 +1,4 @@
-"""Config flow for SAJ Solar & Battery Monitor integration."""
+"""Config flow for SAJ Elekeeper integration."""
 import logging
 import voluptuous as vol
 import async_timeout
@@ -26,7 +26,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 class SajConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for SAJ Solar & Battery Monitor."""
+    """Handle a config flow for SAJ Elekeeper."""
 
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
@@ -118,7 +118,7 @@ class SajConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Finished adding devices, create the entry
                 self.data[CONF_DEVICES] = self.devices
                 return self.async_create_entry(
-                    title=f"SAJ Monitor ({len(self.devices)} devices)",
+                    title=f"SAJ Elekeeper ({len(self.devices)} devices)",
                     data=self.data,
                 )
 

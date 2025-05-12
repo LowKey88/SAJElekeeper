@@ -1,6 +1,6 @@
-"""Constants for the SAJ Solar & Battery Monitor integration."""
+"""Constants for the SAJ Elekeeper integration."""
 
-DOMAIN = "saj"
+DOMAIN = "saj_elekeeper"
 CONF_APP_ID = "app_id"
 CONF_APP_SECRET = "app_secret"
 

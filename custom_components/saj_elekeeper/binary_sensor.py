@@ -1,4 +1,4 @@
-"""Binary sensor platform for SAJ Solar & Battery Monitor integration."""
+"""Binary sensor platform for SAJ Elekeeper integration."""
 import logging
 from typing import Dict, Any, Optional
 

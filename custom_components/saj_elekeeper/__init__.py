@@ -1,4 +1,4 @@
-"""The SAJ Solar & Battery Monitor integration."""
+"""The SAJ Elekeeper integration."""
 import asyncio
 import logging
 from datetime import timedelta
@@ -27,7 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "binary_sensor"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up SAJ Monitor from a config entry."""
+    """Set up SAJ Elekeeper from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     
     # Get configuration
@@ -84,7 +84,7 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
 
 class SajDataUpdateCoordinator(DataUpdateCoordinator):
-    """Class to manage fetching SAJ data."""
+    """Class to manage fetching SAJ Elekeeper data."""
 
     def __init__(
         self,
